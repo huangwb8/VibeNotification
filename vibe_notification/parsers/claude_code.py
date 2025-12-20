@@ -28,6 +28,11 @@ class ClaudeCodeParser(BaseParser):
 
     def can_parse(self) -> bool:
         """检查是否在 Claude Code 钩子上下文中"""
+        # 检查钩子事件环境变量 (SessionEnd, Stop, PostToolUse 等)
+        hook_event = os.environ.get("CLAUDE_HOOK_EVENT")
+        if hook_event in ("SessionEnd", "Stop", "SubagentStop"):
+            return True
+
         # 检查 stdin 是否有数据
         if not sys.stdin.isatty() and self._stdin_has_data():
             return True
@@ -40,6 +45,55 @@ class ClaudeCodeParser(BaseParser):
 
     def parse(self) -> NotificationEvent:
         """解析 Claude Code 钩子事件"""
+        hook_data = {}
+        tool_name = "unknown"
+
+        # 检查钩子事件类型
+        hook_event = os.environ.get("CLAUDE_HOOK_EVENT")
+
+        # Stop 事件 - Claude 完成一次回复
+        if hook_event == "Stop":
+            event = NotificationEvent(
+                type="agent-turn-complete",
+                agent="claude-code",
+                message="Claude 回复完成",
+                summary="Claude Code 已完成回复",
+                timestamp=datetime.now().isoformat(),
+                conversation_end=False,
+                is_last_turn=True,
+                metadata={"event": "Stop"}
+            )
+            return event
+
+        # SubagentStop 事件 - 子代理完成
+        if hook_event == "SubagentStop":
+            event = NotificationEvent(
+                type="agent-turn-complete",
+                agent="claude-code-subagent",
+                message="子代理完成任务",
+                summary="Claude Code 子代理已完成",
+                timestamp=datetime.now().isoformat(),
+                conversation_end=False,
+                is_last_turn=True,
+                metadata={"event": "SubagentStop"}
+            )
+            return event
+
+        # SessionEnd 事件 - 会话结束
+        if hook_event == "SessionEnd":
+            event = NotificationEvent(
+                type="session-end",
+                agent="claude-code",
+                message="会话已结束",
+                summary="Claude Code 会话结束",
+                timestamp=datetime.now().isoformat(),
+                conversation_end=True,
+                is_last_turn=True,
+                metadata={"event": "SessionEnd"}
+            )
+            return event
+
+        # 尝试从 stdin 读取数据
         try:
             if not sys.stdin.isatty():
                 hook_input = sys.stdin.read()

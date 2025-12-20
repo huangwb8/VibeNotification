@@ -14,13 +14,149 @@
 - 快速切换（可与其它参数组合）：`python -m vibe_notification --sound 1 --notification 1 --log-level INFO`
 - 环境变量覆盖：`VIBE_NOTIFICATION_SOUND=0` 或 `VIBE_NOTIFICATION_NOTIFY=0` 可临时关闭
 
-## Claude Code 钩子：结束即通知
+## Claude Code 钩子：回复完成即通知
+
+### 方法一：配置 ~/.claude/settings.json（推荐）
+
+Claude Code 提供了多种钩子事件，您可以根据需要选择：
+
+#### 选项 A：每次回复完成时通知（推荐）✨
+
+**适用场景**：希望 Claude 每次完成回复后立即收到通知，方便及时查看结果。
+
+1. **编辑配置文件**：
+   ```bash
+   # 配置文件路径
+   ~/.claude/settings.json
+   ```
+
+2. **添加 Stop 钩子**：
+   ```json
+   {
+     "hooks": {
+       "Stop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "python -m vibe_notification"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+#### 选项 B：会话结束时通知
+
+**适用场景**：仅在退出 Claude Code 时收到通知。
+
+```json
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m vibe_notification"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### 选项 C：同时使用多个钩子
+
+**适用场景**：既想知道每次回复完成，也想知道会话结束。
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m vibe_notification"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m vibe_notification"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### 配置说明
+
+- **Stop 钩子**：每当 Claude 完成一次回复时触发
+- **SessionEnd 钩子**：当 Claude Code 会话结束时触发
+- **SubagentStop 钩子**：当子代理（Task 工具）完成时触发
+- 使用虚拟环境时需指定完整路径：`/path/to/venv/bin/python -m vibe_notification`
+
+#### 验证配置
+
+```bash
+# 1. 检查配置文件格式
+python -m json.tool ~/.claude/settings.json
+
+# 2. 重启 Claude Code 以加载新配置
+# 直接重新启动 Claude Code 即可
+
+# 3. 发送一条消息测试通知是否正常
+# 当 Claude 回复完成后，应该会收到系统通知
+```
+
+### 方法二：直接使用
+
 1) 在 Claude Code 的钩子/执行后命令里设置：`python -m vibe_notification`
 2) Claude Code 会把当前工具的 JSON（包含 `toolName`）写入 stdin，例如：
    ```bash
    echo '{"toolName": "Task"}' | python -m vibe_notification
    ```
-3) VibeNotification 会视为“本轮输出完成”，发送系统通知和声音提醒，标题类似“claude-code — 会话结束”。
+3) VibeNotification 会视为"本轮输出完成"，发送系统通知和声音提醒，标题类似"claude-code — 会话结束"。
+
+### 高级配置选项
+
+**条件触发通知**（仅特定工具触发）：
+```json
+{
+  "hooks": {
+    "post-tool": [
+      {
+        "command": ["python", "-m", "vibe_notification"],
+        "condition": {
+          "toolName": ["Task", "Bash", "Edit"]
+        }
+      }
+    ]
+  }
+}
+```
+
+**自定义通知参数**：
+```json
+{
+  "hooks": {
+    "post-tool": [
+      ["python", "-m", "vibe_notification", "--sound", "1", "--notification", "1"]
+    ]
+  }
+}
+```
 
 ## Codex：直接传事件
 - 将 Codex 事件 JSON 作为参数传入即可触发通知（最小集成）：
@@ -56,6 +192,54 @@
   ```
 - 可通过 `--history-path /custom/path/history.jsonl` 指定历史文件位置。
 
+## 故障排除
+
+### Claude Code 钩子不生效？
+
+1. **检查配置文件格式**：
+   ```bash
+   # 验证 JSON 格式是否正确
+   python -m json.tool ~/.claude/config.json
+   ```
+
+2. **确认 Python 路径**：
+   ```bash
+   # 查看当前使用的 Python 路径
+   which python
+
+   # 如果使用虚拟环境，需要完整路径
+   which python  # 在激活的虚拟环境中执行
+   ```
+
+3. **手动测试钩子**：
+   ```bash
+   # 模拟 Claude Code 传递的数据
+   echo '{"toolName": "Read"}' | python -m vibe_notification
+   ```
+
+4. **查看 Claude Code 日志**：
+   ```bash
+   # Claude Code 日志位置
+   ~/.claude/logs/
+   ```
+
+### 通知不显示？
+
+1. **macOS 权限设置**：
+   - 系统偏好设置 → 安全性与隐私 → 通知 → 允许终端/你的终端应用发送通知
+
+2. **安装 terminal-notifier**（推荐）：
+   ```bash
+   brew install terminal-notifier
+   ```
+
+3. **测试系统通知**：
+   ```bash
+   # 直接测试通知功能
+   python -m vibe_notification --test
+   ```
+
 ## 小贴士
 - macOS 建议安装 `terminal-notifier` 以确保弹窗稳定：`brew install terminal-notifier`（未安装会回退 AppleScript，部分环境可能被系统权限阻挡）
 - 日志会写入仓库根目录的 `vibe_notification.log`，排查问题时可查看。
+- 使用虚拟环境时，记得在配置文件中使用完整的 Python 解释器路径。

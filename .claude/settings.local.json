@@ -3,7 +3,13 @@
     "allow": [
       "Bash(cat:*)",
       "Bash(chmod:*)",
-      "Bash(python3 -m vibe_notification:*)"
+      "Bash(python3 -m vibe_notification:*)",
+      "Bash(ls:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(/Volumes/2T01/softwares/anoconda/anaconda3/bin/python:*)",
+      "Bash(grep:*)",
+      "Bash(python3:*)",
+      "Bash(CLAUDE_HOOK_EVENT=SessionEnd /Volumes/2T01/softwares/anoconda/anaconda3/bin/python:*)"
     ]
   }
 }

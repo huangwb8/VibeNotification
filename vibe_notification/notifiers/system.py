@@ -54,11 +54,14 @@ class SystemNotifier(BaseNotifier):
                     title,
                     "-message",
                     message,
+                    "-sound", "default"  # 添加声音提示
                 ]
                 if subtitle:
                     args.extend(["-subtitle", subtitle])
                 # 同步等待可捕获失败信息，便于诊断；失败则回退
-                subprocess.run(args, check=True)
+                self.logger.info(f"发送 terminal-notifier 通知: {' '.join(args)}")
+                result = subprocess.run(args, check=True, capture_output=True, text=True)
+                self.logger.info(f"terminal-notifier 成功: stdout={result.stdout}, stderr={result.stderr}")
                 return
             except Exception as e:
                 self.logger.warning(f"terminal-notifier 通知失败，回退到 osascript: {e}")
@@ -72,7 +75,10 @@ class SystemNotifier(BaseNotifier):
             script = f'display notification "{esc_msg}" with title "{esc_title}"'
             if esc_sub:
                 script += f' subtitle "{esc_sub}"'
-            subprocess.run(["osascript", "-e", script], check=True)
+            script += ' sound name "default"'  # 添加声音
+            self.logger.info(f"发送 osascript 通知: {script}")
+            result = subprocess.run(["osascript", "-e", script], check=True, capture_output=True, text=True)
+            self.logger.info(f"osascript 成功: stdout={result.stdout}, stderr={result.stderr}")
             return
         except Exception as e:
             self.logger.warning(f"osascript 通知失败，尝试降级: {e}")

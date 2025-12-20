@@ -100,6 +100,12 @@ def parse_args() -> argparse.Namespace:
         help="监听 ~/.claude/history.jsonl，检测模型单轮输出结束并以 codex 名义发送通知"
     )
 
+    parser.add_argument(
+        "--smart-detection",
+        action="store_true",
+        help="启用智能检测模式，通过分析用户输入和助手输出的模式来更准确地检测对话结束"
+    )
+
     return parser.parse_args()
 
 
@@ -174,12 +180,23 @@ def main() -> None:
 
         history_path = Path(args.history_path) if args.history_path else None
         agent_name = "codex" if args.watch_codex_history else "claude-code"
-        watch_claude_history(
-            notifier,
-            history_path=history_path,
-            poll_interval=args.poll_interval,
-            agent_name=agent_name,
-        )
+
+        # 如果启用智能检测模式，使用改进的监听函数
+        if args.smart_detection:
+            from .watchers.claude_history import watch_claude_history_smart
+            watch_claude_history_smart(
+                notifier,
+                history_path=history_path,
+                poll_interval=args.poll_interval,
+                agent_name=agent_name,
+            )
+        else:
+            watch_claude_history(
+                notifier,
+                history_path=history_path,
+                poll_interval=args.poll_interval,
+                agent_name=agent_name,
+            )
         return
 
     # 测试模式
