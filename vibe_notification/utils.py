@@ -6,8 +6,19 @@
 
 import shutil
 import platform
-from typing import Optional
+from typing import Optional, Dict
 from .models import PlatformType
+
+
+def get_platform_info() -> Dict[str, str]:
+    """获取平台信息"""
+    return {
+        "system": platform.system(),
+        "release": platform.release(),
+        "version": platform.version(),
+        "machine": platform.machine(),
+        "processor": platform.processor()
+    }
 
 
 def detect_platform() -> PlatformType:
@@ -29,6 +40,11 @@ def command_exists(cmd: str) -> bool:
         return shutil.which(cmd) is not None
     except Exception:
         return False
+
+
+def check_command(cmd: str) -> bool:
+    """检查命令是否可用（别名）"""
+    return command_exists(cmd)
 
 
 def truncate_text(text: str, max_length: int = 240) -> str:

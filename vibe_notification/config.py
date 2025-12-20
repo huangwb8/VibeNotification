@@ -61,5 +61,13 @@ def get_env_config() -> NotificationConfig:
         config.enable_notification = False
     if os.environ.get("VIBE_NOTIFICATION_LOG_LEVEL"):
         config.log_level = os.environ["VIBE_NOTIFICATION_LOG_LEVEL"]
+    if os.environ.get("VIBE_NOTIFICATION_SOUND_VOLUME"):
+        try:
+            volume = float(os.environ["VIBE_NOTIFICATION_SOUND_VOLUME"])
+            config.sound_volume = max(0.0, min(1.0, volume))
+        except ValueError:
+            pass
+    if os.environ.get("VIBE_NOTIFICATION_SOUND_TYPE"):
+        config.sound_type = os.environ["VIBE_NOTIFICATION_SOUND_TYPE"]
 
     return config

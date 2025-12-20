@@ -35,7 +35,8 @@ class NotificationConfig:
     enable_sound: bool = True
     enable_notification: bool = True
     notification_timeout: int = 10000  # 毫秒
-    sound_type: str = "default"
+    sound_type: str = "Glass"  # 默认声音改为 Glass
+    sound_volume: float = 0.1  # 音量 0.0-1.0，默认 10%
     log_level: str = "INFO"
     detect_conversation_end: bool = True
 

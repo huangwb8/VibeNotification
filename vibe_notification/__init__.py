@@ -19,13 +19,57 @@ from .models import NotificationConfig, NotificationEvent, NotificationLevel, Pl
 from .config import load_config, save_config
 from .cli import main
 
+# 新增的组件导出
+from .managers import ParserManager, NotifierManager, NotificationBuilder
+from .factories import ParserFactory, NotifierFactory, AdapterFactory
+from .adapters import PlatformAdapter, CommandExecutor, DefaultCommandExecutor, ProcessResult
+from .exceptions import (
+    VibeNotificationError,
+    ConfigurationError,
+    ParserError,
+    NotifierError,
+    CommandExecutionError,
+    UnsupportedPlatformError
+)
+
 __all__ = [
+    # 核心组件
     "VibeNotifier",
+
+    # 数据模型
     "NotificationConfig",
     "NotificationEvent",
     "NotificationLevel",
     "PlatformType",
+
+    # 配置
     "load_config",
     "save_config",
+
+    # CLI
     "main",
+
+    # 管理器
+    "ParserManager",
+    "NotifierManager",
+    "NotificationBuilder",
+
+    # 工厂
+    "ParserFactory",
+    "NotifierFactory",
+    "AdapterFactory",
+
+    # 适配器
+    "PlatformAdapter",
+    "CommandExecutor",
+    "DefaultCommandExecutor",
+    "ProcessResult",
+
+    # 异常
+    "VibeNotificationError",
+    "ConfigurationError",
+    "ParserError",
+    "NotifierError",
+    "CommandExecutionError",
+    "UnsupportedPlatformError",
 ]

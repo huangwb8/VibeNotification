@@ -1,0 +1,48 @@
+{
+  "conversation_end": {
+    "type": "conversation_end",
+    "agent": "claude-code",
+    "message": "我已成功为您创建了登录组件。",
+    "summary": "创建了包含用户名、密码输入框和登录按钮的完整登录组件",
+    "timestamp": "2024-01-15T10:30:00Z",
+    "conversation_end": true,
+    "is_last_turn": true,
+    "tool_name": "claude-code",
+    "model": "claude-3-opus",
+    "response_id": "msg_12345"
+  },
+  "operation_complete": {
+    "type": "operation_complete",
+    "agent": "codex",
+    "message": "代码格式化完成",
+    "summary": "已使用 black 格式化了所有 Python 文件",
+    "timestamp": "2024-01-15T10:35:00Z",
+    "conversation_end": false,
+    "is_last_turn": true,
+    "tool_name": "code-formatter"
+  },
+  "error_event": {
+    "type": "error",
+    "agent": "claude-code",
+    "message": "无法读取文件",
+    "summary": "文件不存在或没有读取权限",
+    "timestamp": "2024-01-15T10:40:00Z",
+    "conversation_end": false,
+    "is_last_turn": false,
+    "tool_name": "file-reader",
+    "error": {
+      "code": "FILE_NOT_FOUND",
+      "message": "No such file or directory"
+    }
+  },
+  "test_event": {
+    "type": "test",
+    "agent": "vibe-notification",
+    "message": "这是一个测试通知",
+    "summary": "VibeNotification 测试运行",
+    "timestamp": "2024-01-15T10:45:00Z",
+    "conversation_end": true,
+    "is_last_turn": true,
+    "tool_name": "test"
+  }
+}

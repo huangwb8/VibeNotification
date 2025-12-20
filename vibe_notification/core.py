@@ -4,26 +4,33 @@
 整合所有组件，提供主要功能
 """
 
-import sys
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, List
-from .models import NotificationConfig, NotificationEvent, NotificationLevel
+from typing import Optional
+from .models import NotificationConfig, NotificationEvent
 from .config import get_env_config
-from .parsers import ClaudeCodeParser, CodexParser, BaseParser
-from .notifiers import SoundNotifier, SystemNotifier
-from .utils import truncate_text
+from .managers import ParserManager, NotifierManager, NotificationBuilder
+from .factories import AdapterFactory
+from .exceptions import VibeNotificationError
 
 
 class VibeNotifier:
-    """VibeNotification 核心类"""
+    """VibeNotification 核心类 - 简化的主协调器"""
 
     def __init__(self, config: Optional[NotificationConfig] = None):
         self.config = config or get_env_config()
+        self.logger = logging.getLogger(__name__)
+
+        # 设置日志
         self._setup_logging()
-        self._setup_parsers()
-        self._setup_notifiers()
+
+        # 创建组件
+        self.executor = AdapterFactory.create_default_executor()
+        self.platform_adapter = AdapterFactory.create_platform_adapter(self.executor)
+        self.parser_manager = ParserManager()
+        self.notifier_manager = NotifierManager(self.config, self.platform_adapter)
+        self.notification_builder = NotificationBuilder()
 
     def _setup_logging(self):
         """设置日志"""
@@ -44,87 +51,82 @@ class VibeNotifier:
         )
         self.logger = logging.getLogger(__name__)
 
-    def _setup_parsers(self):
-        """设置解析器"""
-        self.parsers: List[BaseParser] = [
-            CodexParser(),
-            ClaudeCodeParser(),
-        ]
+    def run(self):
+        """主运行方法"""
+        self.logger.info("VibeNotification 启动")
 
-    def _setup_notifiers(self):
-        """设置通知器"""
-        self.notifiers = [
-            SoundNotifier(self.config),
-            SystemNotifier(self.config),
-        ]
+        try:
+            # 获取解析器并解析事件
+            parser = self.parser_manager.get_available_parser()
+            if parser:
+                event = parser.parse()
+            else:
+                self.logger.warning("未知运行模式，使用测试事件")
+                event = NotificationEvent(
+                    type="test",
+                    agent="vibe-notification",
+                    message="测试通知",
+                    summary="VibeNotification 测试运行",
+                    timestamp=datetime.now().isoformat(),
+                    conversation_end=True,
+                    is_last_turn=True
+                )
 
-    def get_parser(self) -> Optional[BaseParser]:
-        """获取合适的解析器"""
-        for parser in self.parsers:
-            if parser.can_parse():
-                return parser
-        return None
+            if event is None:
+                self.logger.info("解析结果为空，跳过通知发送")
+                return
 
-    def build_notification_content(self, event: NotificationEvent) -> Tuple[str, str, str, NotificationLevel]:
-        """构建通知内容"""
-        if event.conversation_end:
-            title = f"{event.agent} — 会话结束"
-            message = event.summary or event.message or "会话已结束"
-            subtitle = f"工具: {event.tool_name}" if event.tool_name else event.agent
-            level = NotificationLevel.SUCCESS
-        else:
-            title = f"{event.agent} — 操作完成"
-            message = event.message or event.summary or "操作已完成"
-            subtitle = f"工具: {event.tool_name}" if event.tool_name else event.agent
-            level = NotificationLevel.INFO
+            # 处理事件
+            self.process_event(event)
+            self.logger.info("VibeNotification 完成")
 
-        # 截断过长的消息
-        message = truncate_text(message, 240)
-
-        return title, message, subtitle, level
+        except VibeNotificationError as e:
+            self.logger.error(f"VibeNotification 错误: {e}")
+            # 发送错误通知
+            self._send_error_notification(e, "运行时错误")
+            raise
+        except Exception as e:
+            self.logger.error(f"未预期的错误: {e}", exc_info=True)
+            # 发送错误通知
+            self._send_error_notification(e, "未知错误")
+            raise
 
     def process_event(self, event: NotificationEvent):
         """处理事件并发送通知"""
         self.logger.info(f"处理事件: {event.agent} - {event.type} - 会话结束: {event.conversation_end}")
 
-        # 构建通知内容
-        title, message, subtitle, level = self.build_notification_content(event)
+        try:
+            # 构建通知内容
+            content = self.notification_builder.build_notification_content(event)
 
-        # 发送通知
-        for notifier in self.notifiers:
-            if notifier.is_enabled():
-                try:
-                    notifier.notify(title, message, level, subtitle=subtitle)
-                except Exception as e:
-                    self.logger.warning(f"通知器 {notifier.__class__.__name__} 失败: {e}")
-
-        # 记录到日志
-        self.logger.info(f"已发送通知: {title} - {message}")
-
-    def run(self):
-        """主运行方法"""
-        self.logger.info("VibeNotification 启动")
-
-        # 获取解析器
-        parser = self.get_parser()
-        if parser:
-            event = parser.parse()
-        else:
-            self.logger.warning("未知运行模式，使用测试事件")
-            event = NotificationEvent(
-                type="test",
-                agent="vibe-notification",
-                message="测试通知",
-                summary="VibeNotification 测试运行",
-                timestamp=datetime.now().isoformat(),
-                conversation_end=True,
-                is_last_turn=True
+            # 发送通知
+            self.notifier_manager.send_notifications(
+                title=content["title"],
+                message=content["message"],
+                level=content["level"],
+                subtitle=content["subtitle"]
             )
 
-        if event is None:
-            self.logger.info("解析结果为空，跳过通知发送")
-            return
+            # 记录到日志
+            self.logger.info(f"已发送通知: {content['title']} - {content['message']}")
 
-        # 处理事件
-        self.process_event(event)
-        self.logger.info("VibeNotification 完成")
+        except VibeNotificationError:
+            # 重新抛出已知错误
+            raise
+        except Exception as e:
+            # 包装未知错误
+            raise VibeNotificationError(f"处理事件失败: {e}") from e
+
+    def _send_error_notification(self, error: Exception, context: str):
+        """发送错误通知"""
+        try:
+            content = self.notification_builder.build_error_notification(error, context)
+            self.notifier_manager.send_notifications(
+                title=content["title"],
+                message=content["message"],
+                level=content["level"],
+                subtitle=content["subtitle"]
+            )
+        except Exception as e:
+            # 如果错误通知也失败了，只能记录到日志
+            self.logger.error(f"发送错误通知失败: {e}")
