@@ -11,10 +11,14 @@ from typing import Any, Dict, Optional
 
 class NotificationLevel(Enum):
     """通知级别"""
-    INFO = "info"
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
+    INFO = "INFO"
+    SUCCESS = "SUCCESS"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+
+    def __str__(self) -> str:
+        """返回枚举值，便于日志与比较"""
+        return self.value
 
 
 class PlatformType(Enum):

@@ -71,20 +71,20 @@ pip install /path/to/VibeNotification
    ```bash
    # 创建配置目录
    mkdir -p ~/.config/claude-code/hooks
-   
+
    # 创建钩子配置
    cat > ~/.config/claude-code/hooks/vibe-notification.json << 'EOF'
    {
      "PostToolUse": {
        "command": "python",
-       "args": ["/path/to/VibeNotification/notify_new.py"]
+       "args": ["/path/to/VibeNotification/notify.py"]
      }
    }
    EOF
    ```
 
 2. **使用绝对路径**：
-   将 `/path/to/VibeNotification/notify_new.py` 替换为实际路径：
+   将 `/path/to/VibeNotification/notify.py` 替换为实际路径：
 
    ```bash
    # 获取绝对路径
@@ -95,7 +95,7 @@ pip install /path/to/VibeNotification
 3. **验证配置**：
    ```bash
    # 测试钩子
-   echo '{"toolName": "Task", "conversation_end": true}' | python notify_new.py
+   echo '{"toolName": "Task", "conversation_end": true}' | python -m vibe_notification
    ```
 
 ###  Codex
@@ -108,7 +108,7 @@ pip install /path/to/VibeNotification
   "event_handlers": {
     "agent-turn-complete": {
       "command": "python",
-      "args": ["/path/to/VibeNotification/notify_new.py"]
+      "args": ["/path/to/VibeNotification/notify.py"]
     }
   }
 }
@@ -118,29 +118,29 @@ pip install /path/to/VibeNotification
 
 #### 测试模式
 ```bash
-# 发送测试通知
-python notify_new.py --test
+# 发送测试通知（推荐方式）
+python -m vibe_notification --test
 
-# 或使用模块方式
+# 或者直接导入模块
 python -c "from vibe_notification import VibeNotifier; VibeNotifier().run()"
 ```
 
 #### 模拟 Claude Code 事件
 ```bash
-# 模拟会话结束事件
-echo '{"toolName": "ExitPlanMode", "conversation_end": true}' | python notify_new.py
+# 模拟会话结束事件（推荐方式）
+echo '{"toolName": "ExitPlanMode", "conversation_end": true}' | python -m vibe_notification
 
 # 模拟普通工具事件
-echo '{"toolName": "Write", "conversation_end": false}' | python notify_new.py
+echo '{"toolName": "Write", "conversation_end": false}' | python -m vibe_notification
 ```
 
 #### 模拟 Codex 事件
 ```bash
-# 模拟 Codex 会话结束
-python notify_new.py '{"type": "agent-turn-complete", "agent": "codex", "conversation_end": true}'
+# 模拟 Codex 会话结束（推荐方式）
+python -m vibe_notification '{"type": "agent-turn-complete", "agent": "codex", "conversation_end": true}'
 
 # 模拟 Codex 普通事件
-python notify_new.py '{"type": "agent-turn-complete", "agent": "codex", "message": "操作完成"}'
+python -m vibe_notification '{"type": "agent-turn-complete", "agent": "codex", "message": "操作完成"}'
 ```
 
 ### 4. 平台特定设置
@@ -179,13 +179,13 @@ python notify_new.py '{"type": "agent-turn-complete", "agent": "codex", "message
 python --version
 
 # 运行测试套件
-python tests/test_notification_new.py
+python -m pytest tests/
 
 # 检查配置
-python notify_new.py --config
+python -m vibe_notification --config
 
 # 查看帮助
-python notify_new.py --help
+python -m vibe_notification --help
 ```
 
 ### 6. 故障排除
@@ -213,7 +213,7 @@ python notify_new.py --help
 ### 7. 下一步
 
 安装并验证成功后：
-1. **自定义配置**：运行 `python notify_new.py --config` 进行交互式配置
+1. **自定义配置**：运行 `python -m vibe_notification --config` 进行交互式配置
 2. **高级用法**：查看 [examples/](examples/) 目录了解更多用法
 3. **集成到工作流**：将 VibeNotification 集成到你的自动化工作流中
 
@@ -307,22 +307,20 @@ VibeNotification/
 │   └── detectors/              # 检测器
 │       ├── __init__.py
 │       └── conversation.py     # 会话结束检测器
-├── notify_new.py               # 兼容性入口脚本（新）
-├── notify.py                   # 旧版兼容性入口脚本
+├── notify.py                   # 向后兼容性入口脚本
 ├── config.json                 # 配置文件（可选）
 ├── requirements.txt            # Python 依赖
-├── setup.py                    # 安装脚本
+├── setup.py                    # 安装脚本（向后兼容）
+├── pyproject.toml              # 现代构建配置
 ├── README.md                   # 本文档
 ├── LICENSE                     # MIT 许可证
 ├── tests/                      # 测试文件
-│   ├── test_notification.py    # 旧测试
-│   └── test_notification_new.py # 新测试
+│   └── test_notification.py    # 测试套件
 ├── docs/                       # 文档
 │   ├── configuration.md
 │   └── advanced_usage.md
 └── examples/                   # 示例代码
-    ├── custom_notifier.py      # 旧示例
-    └── custom_notifier_new.py  # 新示例
+    └── custom_notifier.py      # 自定义通知器示例
 ```
 
 ## 🔧 开发
@@ -340,8 +338,8 @@ source venv/bin/activate  # Linux/macOS
 # 或
 venv\Scripts\activate     # Windows
 
-# 安装开发依赖
-pip install -e ".[dev]"
+# 安装为可编辑模式（使用现代构建）
+pip install -e . --use-pep517
 ```
 
 ### 运行测试

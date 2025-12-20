@@ -19,9 +19,12 @@ def get_config_path() -> Path:
     return config_dir / "config.json"
 
 
-def load_config() -> NotificationConfig:
-    """加载配置"""
-    config_path = get_config_path()
+def load_config(config_path: Optional[os.PathLike | str] = None) -> NotificationConfig:
+    """加载配置
+
+    如果指定路径则使用提供的配置文件，否则读取默认位置。
+    """
+    config_path = Path(config_path) if config_path else get_config_path()
 
     if not config_path.exists():
         return NotificationConfig()
@@ -36,9 +39,9 @@ def load_config() -> NotificationConfig:
         return NotificationConfig()
 
 
-def save_config(config: NotificationConfig) -> None:
+def save_config(config: NotificationConfig, config_path: Optional[os.PathLike | str] = None) -> None:
     """保存配置"""
-    config_path = get_config_path()
+    config_path = Path(config_path) if config_path else get_config_path()
 
     try:
         with open(config_path, 'w', encoding='utf-8') as f:
