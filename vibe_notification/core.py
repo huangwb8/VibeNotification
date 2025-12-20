@@ -121,6 +121,10 @@ class VibeNotifier:
                 is_last_turn=True
             )
 
+        if event is None:
+            self.logger.info("解析结果为空，跳过通知发送")
+            return
+
         # 处理事件
         self.process_event(event)
         self.logger.info("VibeNotification 完成")

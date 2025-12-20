@@ -7,7 +7,7 @@ Codex 解析器
 import json
 import sys
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from .base import BaseParser
 from ..models import NotificationEvent
 from ..detectors.conversation import detect_conversation_end
@@ -28,7 +28,7 @@ class CodexParser(BaseParser):
         except Exception:
             return False
 
-    def parse(self) -> NotificationEvent:
+    def parse(self) -> Optional[NotificationEvent]:
         """解析 Codex 事件"""
         try:
             # 兼容 `python -m vibe_notification <JSON>` 或 `notify=["python","-m","vibe_notification"]`
@@ -38,10 +38,11 @@ class CodexParser(BaseParser):
 
             # 检测会话结束
             conversation_end = detect_conversation_end(event_data)
+            agent = event_data.get("agent") or "codex"
 
             event = NotificationEvent(
                 type=event_data.get("type", "unknown"),
-                agent=event_data.get("agent", "unknown"),
+                agent=agent,
                 message=event_data.get("message", ""),
                 summary=event_data.get("summary", ""),
                 timestamp=event_data.get("timestamp", datetime.now().isoformat()),

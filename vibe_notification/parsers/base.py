@@ -22,8 +22,8 @@ class BaseParser(ABC):
         pass
 
     @abstractmethod
-    def parse(self) -> NotificationEvent:
-        """解析事件"""
+    def parse(self) -> Optional[NotificationEvent]:
+        """解析事件，返回 None 表示不发送通知"""
         pass
 
     def create_fallback_event(self, agent: str = "unknown", message: str = "未知事件") -> NotificationEvent:

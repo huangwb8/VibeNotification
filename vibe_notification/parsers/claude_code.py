@@ -9,7 +9,7 @@ import os
 import sys
 import select
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from .base import BaseParser
 from ..models import NotificationEvent
 from ..detectors.conversation import detect_conversation_end_from_hook
@@ -43,7 +43,7 @@ class ClaudeCodeParser(BaseParser):
 
         return False
 
-    def parse(self) -> NotificationEvent:
+    def parse(self) -> Optional[NotificationEvent]:
         """解析 Claude Code 钩子事件"""
         hook_data = {}
         tool_name = "unknown"
@@ -81,17 +81,9 @@ class ClaudeCodeParser(BaseParser):
 
         # SessionEnd 事件 - 会话结束
         if hook_event == "SessionEnd":
-            event = NotificationEvent(
-                type="session-end",
-                agent="claude-code",
-                message="会话已结束",
-                summary="Claude Code 会话结束",
-                timestamp=datetime.now().isoformat(),
-                conversation_end=True,
-                is_last_turn=True,
-                metadata={"event": "SessionEnd"}
-            )
-            return event
+            # 退出 Claude Code 时不再发送通知
+            self.logger.info("检测到 SessionEnd 事件，跳过通知发送")
+            return None
 
         # 尝试从 stdin 读取数据
         try:
