@@ -1,0 +1,10 @@
+# VibeNotification 配置文件示例
+
+{
+  "enable_sound": true,
+  "enable_notification": true,
+  "notification_timeout": 10000,
+  "sound_type": "default",
+  "log_level": "INFO",
+  "detect_conversation_end": true
+}

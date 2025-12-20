@@ -1,0 +1,62 @@
+"""
+配置管理模块
+
+负责加载、保存和管理配置
+"""
+
+import json
+import os
+from pathlib import Path
+from typing import Optional
+from .models import NotificationConfig
+
+
+def get_config_path() -> Path:
+    """获取配置文件路径"""
+    # 优先使用用户配置目录
+    config_dir = Path.home() / ".config" / "vibe-notification"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir / "config.json"
+
+
+def load_config() -> NotificationConfig:
+    """加载配置"""
+    config_path = get_config_path()
+
+    if not config_path.exists():
+        return NotificationConfig()
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return NotificationConfig.from_dict(data)
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        # 配置文件损坏，使用默认配置
+        print(f"警告：配置文件损坏，使用默认配置: {e}")
+        return NotificationConfig()
+
+
+def save_config(config: NotificationConfig) -> None:
+    """保存配置"""
+    config_path = get_config_path()
+
+    try:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config.to_dict(), f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"保存配置失败: {e}")
+
+
+def get_env_config() -> NotificationConfig:
+    """从环境变量获取配置"""
+    config = load_config()
+
+    # 覆盖环境变量
+    if os.environ.get("VIBE_NOTIFICATION_SOUND") == "0":
+        config.enable_sound = False
+    if os.environ.get("VIBE_NOTIFICATION_NOTIFY") == "0":
+        config.enable_notification = False
+    if os.environ.get("VIBE_NOTIFICATION_LOG_LEVEL"):
+        config.log_level = os.environ["VIBE_NOTIFICATION_LOG_LEVEL"]
+
+    return config
