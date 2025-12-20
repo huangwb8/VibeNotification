@@ -10,6 +10,7 @@ import tempfile
 import logging
 
 from vibe_notification import VibeNotifier, NotificationEvent, NotificationConfig, NotificationLevel
+from vibe_notification.detectors import detect_conversation_end, detect_conversation_end_from_hook
 
 
 def test_notification_event():
@@ -148,6 +149,21 @@ def test_notification_level():
     assert str(NotificationLevel.ERROR) == "ERROR"
 
     print("✅ NotificationLevel 测试通过")
+
+
+def test_detect_conversation_end_turn_complete():
+    """测试 agent turn 完成的会话结束检测"""
+    event = {"type": "agent-turn-complete", "agent": "codex"}
+    assert detect_conversation_end(event) is True
+
+    hook_data = {"toolName": "Write"}
+    assert detect_conversation_end_from_hook(hook_data) is True
+
+
+def test_detect_conversation_end_assistant_role():
+    """测试助手角色输出完成的检测"""
+    event = {"role": "assistant", "display": "how are you?", "partial": False}
+    assert detect_conversation_end(event) is True
 
 
 def main():

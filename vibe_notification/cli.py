@@ -76,6 +76,30 @@ def parse_args() -> argparse.Namespace:
         help="显示版本信息"
     )
 
+    parser.add_argument(
+        "--watch-claude-history",
+        action="store_true",
+        help="监听 ~/.claude/history.jsonl，检测模型单轮输出结束并发送通知"
+    )
+
+    parser.add_argument(
+        "--history-path",
+        help="自定义 Claude history 路径，默认 ~/.claude/history.jsonl"
+    )
+
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=2.0,
+        help="监听模式下的轮询间隔（秒），默认 2.0"
+    )
+
+    parser.add_argument(
+        "--watch-codex-history",
+        action="store_true",
+        help="监听 ~/.claude/history.jsonl，检测模型单轮输出结束并以 codex 名义发送通知"
+    )
+
     return parser.parse_args()
 
 
@@ -142,6 +166,21 @@ def main() -> None:
 
     # 创建通知器
     notifier = VibeNotifier(config)
+
+    # 监听 Claude history 模式
+    if args.watch_claude_history or args.watch_codex_history:
+        from pathlib import Path
+        from .watchers.claude_history import watch_claude_history
+
+        history_path = Path(args.history_path) if args.history_path else None
+        agent_name = "codex" if args.watch_codex_history else "claude-code"
+        watch_claude_history(
+            notifier,
+            history_path=history_path,
+            poll_interval=args.poll_interval,
+            agent_name=agent_name,
+        )
+        return
 
     # 测试模式
     if args.test:
