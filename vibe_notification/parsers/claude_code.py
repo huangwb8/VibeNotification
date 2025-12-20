@@ -7,6 +7,7 @@ Claude Code 解析器
 import json
 import os
 import sys
+import select
 from datetime import datetime
 from typing import Any, Dict
 from .base import BaseParser
@@ -17,10 +18,18 @@ from ..detectors.conversation import detect_conversation_end_from_hook
 class ClaudeCodeParser(BaseParser):
     """Claude Code 解析器"""
 
+    def _stdin_has_data(self) -> bool:
+        """检查 stdin 是否有可读数据"""
+        try:
+            readable, _, _ = select.select([sys.stdin], [], [], 0)
+            return bool(readable)
+        except Exception:
+            return False
+
     def can_parse(self) -> bool:
         """检查是否在 Claude Code 钩子上下文中"""
         # 检查 stdin 是否有数据
-        if not sys.stdin.isatty():
+        if not sys.stdin.isatty() and self._stdin_has_data():
             return True
 
         # 检查环境变量

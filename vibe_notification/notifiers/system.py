@@ -43,6 +43,22 @@ class SystemNotifier(BaseNotifier):
 
     def _notify_macos(self, title: str, message: str, subtitle: str, level: NotificationLevel):
         """macOS 显示通知"""
+        # 优先使用 terminal-notifier，避免部分环境下 osascript 权限/语法问题
+        if command_exists("terminal-notifier"):
+            args = [
+                "terminal-notifier",
+                "-title",
+                title,
+                "-message",
+                message,
+                "-sound",
+                "Glass",
+            ]
+            if subtitle:
+                args.extend(["-subtitle", subtitle])
+            subprocess.Popen(args)
+            return
+
         esc_msg = escape_for_osascript(message)
         esc_title = escape_for_osascript(title)
         esc_sub = escape_for_osascript(subtitle)

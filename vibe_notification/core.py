@@ -40,8 +40,8 @@ class VibeNotifier:
     def _setup_parsers(self):
         """设置解析器"""
         self.parsers: List[BaseParser] = [
-            ClaudeCodeParser(),
             CodexParser(),
+            ClaudeCodeParser(),
         ]
 
     def _setup_notifiers(self):
