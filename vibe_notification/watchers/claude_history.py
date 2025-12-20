@@ -2,7 +2,7 @@
 历史监听器
 
 监听 ~/.claude/history.jsonl 中模型“本轮输出完成”的信号，并触发通知。
-默认 agent 为 claude-code，可通过参数覆盖为 codex 等。
+默认 agent 为 claude-code，可通过参数覆盖。
 """
 
 import json
@@ -21,7 +21,7 @@ def watch_claude_history_smart(
     poll_interval: float = 2.0,
     agent_name: str = "claude-code",
 ) -> None:
-    """监听 Claude Code/Codex 历史文件，一旦模型完成当前一轮输出就发送通知。"""
+    """监听 Claude Code 历史文件，一旦模型完成当前一轮输出就发送通知。"""
     history_path = history_path or (Path.home() / ".claude" / "history.jsonl")
     offset = 0
     last_session_id = None

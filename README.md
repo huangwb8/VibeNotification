@@ -2,7 +2,7 @@
 
 让 Claude Code 或 Codex 的单轮对话结束时自动弹出系统通知并播放提示音的轻量工具。
 
-## 安装与快速验证
+## 安装
 
 - 准备虚拟环境（可选）：`python -m venv venv && source venv/bin/activate`
 - 开发模式安装：`pip install -e .`
@@ -141,47 +141,32 @@ requires_openai_auth = true
 notifications = true
 ```
 
+Codex 会把当前回合的事件 JSON 作为最后一个参数传入 `notify`，`CodexParser` 会自动读取 `type`/`finish_reason`/`tool_name` 等字段来判断是否是“本轮已完成”，无需额外处理。
+
+快速自测（确认弹窗+响铃）：  
+```bash
+python -m vibe_notification '{"type":"agent-turn-complete","agent":"codex","message":"turn done"}'
+```
+
+典型事件 JSON（Codex 默认传入的形态）：
+```json
+{
+  "type": "agent-turn-complete",
+  "agent": "codex",
+  "message": "tool Bash finished",
+  "tool_name": "Bash",
+  "timestamp": 1719999999,
+  "metadata": {
+    "turn": 3,
+    "sessionId": "abc-123"
+  }
+}
+```
+
 #### 其它配置
 
 - 只弹窗不响铃：`notify = ["python3","-m","vibe_notification","--sound","0"]`
 - 只响铃不弹窗：`notify = ["python3","-m","vibe_notification","--notification","0"]`
 - 临时控制：在命令前增加环境变量，例如 `notify = ["env","VIBE_NOTIFICATION_SOUND=0","python3","-m","vibe_notification"]`
 
-#### 监听模式：无需 Codex 配置
-
-无法修改 Codex `config.toml` 时，可让监听器常驻后台：
-
-```bash
-nohup python -m vibe_notification --watch-codex-history --smart-detection --poll-interval 1.5 >/tmp/vibe_notify.log 2>&1 &
-```
-
-它会监控 `~/.claude/history.jsonl`，当检测到 Codex 模型单轮输出结束时自动通知；`--poll-interval` 可调轮询频率。
-
-### 高级配置选项
-
-**条件触发通知**（仅特定工具触发）：
-```json
-{
-  "hooks": {
-    "post-tool": [
-      {
-        "command": ["python", "-m", "vibe_notification"],
-        "condition": {
-          "toolName": ["Task", "Bash", "Edit"]
-        }
-      }
-    ]
-  }
-}
-```
-
-**自定义通知参数**：
-```json
-{
-  "hooks": {
-    "post-tool": [
-      ["python", "-m", "vibe_notification", "--sound", "1", "--notification", "1"]
-    ]
-  }
-}
-```
+## 所有参数

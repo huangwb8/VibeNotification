@@ -95,12 +95,6 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--watch-codex-history",
-        action="store_true",
-        help="监听 ~/.claude/history.jsonl，检测模型单轮输出结束并以 codex 名义发送通知"
-    )
-
-    parser.add_argument(
         "--smart-detection",
         action="store_true",
         help="启用智能检测模式，通过分析用户输入和助手输出的模式来更准确地检测对话结束"
@@ -174,12 +168,12 @@ def main() -> None:
     notifier = VibeNotifier(config)
 
     # 监听 Claude history 模式
-    if args.watch_claude_history or args.watch_codex_history:
+    if args.watch_claude_history:
         from pathlib import Path
         from .watchers.claude_history import watch_claude_history
 
         history_path = Path(args.history_path) if args.history_path else None
-        agent_name = "codex" if args.watch_codex_history else "claude-code"
+        agent_name = "claude-code"
 
         # 如果启用智能检测模式，使用改进的监听函数
         if args.smart_detection:
