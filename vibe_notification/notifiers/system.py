@@ -23,6 +23,8 @@ class SystemNotifier(BaseNotifier):
     def notify(self, title: str, message: str, level: NotificationLevel = NotificationLevel.INFO, **kwargs):
         """显示系统通知"""
         if not self.is_enabled():
+            # 提示配置禁用了系统通知，避免用户误以为失败
+            self.logger.info("系统通知已禁用（enable_notification = False）")
             return
 
         subtitle = kwargs.get("subtitle", "")
@@ -45,30 +47,66 @@ class SystemNotifier(BaseNotifier):
         """macOS 显示通知"""
         # 优先使用 terminal-notifier，避免部分环境下 osascript 权限/语法问题
         if command_exists("terminal-notifier"):
-            args = [
-                "terminal-notifier",
-                "-title",
-                title,
-                "-message",
-                message,
-                "-sound",
-                "Glass",
-            ]
-            if subtitle:
-                args.extend(["-subtitle", subtitle])
-            subprocess.Popen(args)
+            try:
+                args = [
+                    "terminal-notifier",
+                    "-title",
+                    title,
+                    "-message",
+                    message,
+                ]
+                if subtitle:
+                    args.extend(["-subtitle", subtitle])
+                # 同步等待可捕获失败信息，便于诊断；失败则回退
+                subprocess.run(args, check=True)
+                return
+            except Exception as e:
+                self.logger.warning(f"terminal-notifier 通知失败，回退到 osascript: {e}")
+
+        # 先尝试原文 osascript
+        try:
+            esc_msg = escape_for_osascript(message)
+            esc_title = escape_for_osascript(title)
+            esc_sub = escape_for_osascript(subtitle)
+
+            script = f'display notification "{esc_msg}" with title "{esc_title}"'
+            if esc_sub:
+                script += f' subtitle "{esc_sub}"'
+            subprocess.run(["osascript", "-e", script], check=True)
             return
+        except Exception as e:
+            self.logger.warning(f"osascript 通知失败，尝试降级: {e}")
 
-        esc_msg = escape_for_osascript(message)
-        esc_title = escape_for_osascript(title)
-        esc_sub = escape_for_osascript(subtitle)
+        # 尝试 System Events 版本（某些环境对 display notification 有差异）
+        try:
+            esc_msg = escape_for_osascript(message)
+            esc_title = escape_for_osascript(title)
+            esc_sub = escape_for_osascript(subtitle)
+            script = f'tell application "System Events" to display notification "{esc_msg}" with title "{esc_title}"'
+            if esc_sub:
+                script += f' subtitle "{esc_sub}"'
+            subprocess.run(["osascript", "-e", script], check=True)
+            return
+        except Exception as e:
+            self.logger.warning(f"System Events 通知失败，尝试 ASCII 降级: {e}")
 
-        script = f'display notification "{esc_msg}" with title "{esc_title}"'
-        if esc_sub:
-            script += f' subtitle "{esc_sub}"'
-        script += ' sound name "Glass"'
+        # 再尝试降级：移除非 ASCII 以规避个别 AppleScript 解析问题
+        try:
+            def to_ascii_safe(s: str) -> str:
+                return s.encode("ascii", errors="ignore").decode() or "Notification"
 
-        subprocess.Popen(["osascript", "-e", script])
+            esc_msg = escape_for_osascript(to_ascii_safe(message))
+            esc_title = escape_for_osascript(to_ascii_safe(title))
+            esc_sub = escape_for_osascript(to_ascii_safe(subtitle))
+
+            script = f'display notification "{esc_msg}" with title "{esc_title}"'
+            if esc_sub:
+                script += f' subtitle "{esc_sub}"'
+            subprocess.run(["osascript", "-e", script], check=True)
+            return
+        except Exception as e:
+            self.logger.warning(f"降级 osascript 仍失败: {e}")
+            raise
 
     def _notify_linux(self, title: str, message: str, level: NotificationLevel):
         """Linux 显示通知"""

@@ -18,13 +18,22 @@ class CodexParser(BaseParser):
 
     def can_parse(self) -> bool:
         """检查是否可以解析 Codex 事件"""
-        # 检查是否有命令行参数
-        return len(sys.argv) == 2
+        # Codex notify 会将事件 JSON 作为“最后一个参数”传入，可能伴随 `-m vibe_notification`
+        # 等额外参数；因此只要末尾参数是合法 JSON 就认为可解析
+        if len(sys.argv) < 2:
+            return False
+        try:
+            json.loads(sys.argv[-1])
+            return True
+        except Exception:
+            return False
 
     def parse(self) -> NotificationEvent:
         """解析 Codex 事件"""
         try:
-            event_json = sys.argv[1]
+            # 兼容 `python -m vibe_notification <JSON>` 或 `notify=["python","-m","vibe_notification"]`
+            # 等形式，取最后一个参数作为事件 JSON
+            event_json = sys.argv[-1]
             event_data = json.loads(event_json)
 
             # 检测会话结束

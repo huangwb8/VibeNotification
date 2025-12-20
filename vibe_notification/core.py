@@ -7,6 +7,7 @@
 import sys
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Tuple, List
 from .models import NotificationConfig, NotificationEvent, NotificationLevel
 from .config import get_env_config
@@ -27,13 +28,19 @@ class VibeNotifier:
     def _setup_logging(self):
         """设置日志"""
         log_level = getattr(logging, self.config.log_level.upper(), logging.INFO)
+
+        # 获取日志文件路径 (放在项目目录或用户目录)
+        log_path = Path.home() / ".config" / "vibe-notification" / "vibe_notification.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 只使用文件日志,避免在 Codex 终端显示
         logging.basicConfig(
             level=log_level,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.StreamHandler(sys.stderr),
-                logging.FileHandler('vibe_notification.log')
-            ]
+                logging.FileHandler(log_path, encoding='utf-8')
+            ],
+            force=True  # 强制重新配置,覆盖任何现有配置
         )
         self.logger = logging.getLogger(__name__)
 
