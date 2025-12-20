@@ -57,7 +57,7 @@ Claude Code 提供了多种钩子事件，您可以根据需要选择：
 
 #### 会话结束时通知
 
-**适用场景**：仅在退出 Claude Code 时收到通知。
+**适用场景**：仅在退出 Claude Code 时收到通知。并不实用，但还是配置了。
 
 ```json
 {
@@ -141,7 +141,21 @@ requires_openai_auth = true
 notifications = true
 ```
 
+#### 其它配置
 
+- 只弹窗不响铃：`notify = ["python3","-m","vibe_notification","--sound","0"]`
+- 只响铃不弹窗：`notify = ["python3","-m","vibe_notification","--notification","0"]`
+- 临时控制：在命令前增加环境变量，例如 `notify = ["env","VIBE_NOTIFICATION_SOUND=0","python3","-m","vibe_notification"]`
+
+#### 监听模式：无需 Codex 配置
+
+无法修改 Codex `config.toml` 时，可让监听器常驻后台：
+
+```bash
+nohup python -m vibe_notification --watch-codex-history --smart-detection --poll-interval 1.5 >/tmp/vibe_notify.log 2>&1 &
+```
+
+它会监控 `~/.claude/history.jsonl`，当检测到 Codex 模型单轮输出结束时自动通知；`--poll-interval` 可调轮询频率。
 
 ### 高级配置选项
 
