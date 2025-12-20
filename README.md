@@ -107,6 +107,42 @@ Claude Code 提供了多种钩子事件，您可以根据需要选择：
 }
 ```
 
+
+
+### Codex
+
+> 如果希望在 Codex CLI里回复结束自动通知，可在 Codex `~/.codex/config.toml` 里配置 `notify`，让 Codex 在每次 `agent-turn-complete` 时调用 VibeNotification。  
+
+#### 每次回复完成时通知（推荐）✨
+
+- 打开 `~/.codex/config.toml`，添加：
+
+```toml
+# Codex 通知钩子：将事件 JSON 传给 VibeNotification
+notify = ["python3", "-m", "vibe_notification"] 
+```
+
+这是一个实际配置文件的一部分：
+
+```toml
+model_provider = "packycode"
+model = "gpt-5.1-codex-max"
+model_reasoning_effort = "medium"
+disable_response_storage = true
+notify = ["python3", "-m", "vibe_notification"]
+
+[model_providers.packycode]
+name = "packycode"
+base_url = "https://codex-api.packycode.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+
+[tui]
+notifications = true
+```
+
+
+
 ### 高级配置选项
 
 **条件触发通知**（仅特定工具触发）：
@@ -135,29 +171,3 @@ Claude Code 提供了多种钩子事件，您可以根据需要选择：
   }
 }
 ```
-
-### Codex
-
-> 如果希望在 Codex CLI里回复结束自动通知，可在 Codex `~/.codex/config.toml` 里配置 `notify`，让 Codex 在每次 `agent-turn-complete` 时调用 VibeNotification。  
-
-#### 每次回复完成时通知（推荐）✨
-
-- 打开 `~/.codex/config.toml`，添加（或合并）：
-
-```toml
-model_provider = "packycode"
-model = "gpt-5.1-codex-max"
-model_reasoning_effort = "medium"
-disable_response_storage = true
-notify = ["python3", "-m", "vibe_notification"] # Codex 通知钩子：将事件 JSON 传给 VibeNotification
-
-[model_providers.packycode]
-name = "packycode"
-base_url = "https://codex-api.packycode.com/v1"
-wire_api = "responses"
-requires_openai_auth = true
-
-[tui]
-notifications = true
-```
-
