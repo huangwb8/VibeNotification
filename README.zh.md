@@ -11,6 +11,8 @@
 
 <strong>在 Claude Code 或 Codex 回复结束时自动弹窗+提示音的轻量工具，让你不用守着终端等结果。</strong>
 
+[博客教程：AI应用系列 一个简单的 Vibe coding 的通知系统](https://blognas.hwb0307.com/ai/6659)
+
 </div>
 
 ## 安装
