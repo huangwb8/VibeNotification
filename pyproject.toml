@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vibe-notification"
-version = "1.0.2"
+version = "1.0.3"
 description = "智能 AI 助手会话结束通知系统"
 readme = "README.md"
 authors = [
-    {name = "Bensz Conan", email = "35643122+huangwb8@users.noreply.github.com"}
+    {name = "huangwb8", email = "hwb2012@qq.com"}
 ]
 license = "MIT"
 classifiers = [

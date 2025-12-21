@@ -9,7 +9,29 @@ VibeNotification - 为 Claude Code 和 Codex 提供智能会话结束通知
 5. 详细的日志记录
 """
 
-__version__ = "1.0.2"
+from importlib import metadata
+from pathlib import Path
+import re
+
+
+def _resolve_version() -> str:
+    """Load version from installed metadata, fallback to pyproject.toml for editable mode."""
+    try:
+        return metadata.version("vibe-notification")
+    except metadata.PackageNotFoundError:
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        if pyproject.is_file():
+            match = re.search(
+                r'^version\s*=\s*"([^"]+)"',
+                pyproject.read_text(encoding="utf-8"),
+                re.MULTILINE,
+            )
+            if match:
+                return match.group(1)
+    return "0.0.0"
+
+
+__version__ = _resolve_version()
 __author__ = "Bensz Conan"
 __email__ = "35643122+huangwb8@users.noreply.github.com"
 

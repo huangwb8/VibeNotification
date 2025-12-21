@@ -461,7 +461,7 @@ VIBE_NOTIFICATION_SOUND=1 VIBE_NOTIFICATION_NOTIFY=1 python -m vibe_notification
 
 ## 发布到 PyPI
 
-1. 同步更新版本号：`pyproject.toml` 与 `vibe_notification/__init__.py`。
+1. 更新版本号：仅修改 `pyproject.toml`（唯一来源）。
 2. 安装工具：`python -m pip install --upgrade build twine`。
 3. 构建：`python -m build`（生成 `dist/` 下 `.tar.gz` 与 `.whl`）。
 4. 校验：`python -m twine check dist/*`。

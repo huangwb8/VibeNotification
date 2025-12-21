@@ -461,7 +461,7 @@ VIBE_NOTIFICATION_SOUND=1 VIBE_NOTIFICATION_NOTIFY=1 python -m vibe_notification
 
 ## Publishing to PyPI
 
-1. Bump the version in both `pyproject.toml` and `vibe_notification/__init__.py`.
+1. Bump the version in `pyproject.toml` (single source of truth).
 2. Install tooling: `python -m pip install --upgrade build twine`.
 3. Build: `python -m build` (creates `.tar.gz` and `.whl` under `dist/`).
 4. Validate: `python -m twine check dist/*`.
