@@ -174,3 +174,4 @@ test_output/
 
 # Cache
 .cache/
+tests/上传prompts.md
