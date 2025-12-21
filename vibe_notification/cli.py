@@ -111,13 +111,16 @@ def interactive_config() -> None:
     """交互式配置"""
     # 首先选择语言
     language = select_language()
-    set_language(language)
+    config = load_config()
+    previous_language = getattr(config, "language", "zh")
+    config.language = language
+    set_language(config.language)
+    language_changed = config.language != previous_language
 
     print(f"\n{t('config_title')}")
     print(f"{t('press_esc_to_exit')}")
     print(f"{t('press_enter_to_skip')}\n")
 
-    config = load_config()
     term_width = get_terminal_width()
 
     # 显示当前配置 - 使用适应终端宽度的格式
@@ -150,11 +153,15 @@ def interactive_config() -> None:
         print(f"\n{t('config_cancelled')}")
         return
     if not answer:
+        if language_changed:
+            save_config(config)
+            print(f"\n{t('config_saved')}")
         return
 
     print(f"\n{t('current_config')}:")
 
     # 声音通知开关
+    print(f"  {t('sound_hint')}")
     current_status = t('enable') if config.enable_sound else t('disable')
     prompt = f"  {t('sound_notification')} (y/n) [{current_status}]: "
     answer = im.ask_yes_no(prompt, default=config.enable_sound)
@@ -165,6 +172,7 @@ def interactive_config() -> None:
         config.enable_sound = answer
 
     # 系统通知开关
+    print(f"  {t('system_hint')}")
     current_status = t('enable') if config.enable_notification else t('disable')
     prompt = f"  {t('system_notification')} (y/n) [{current_status}]: "
     answer = im.ask_yes_no(prompt, default=config.enable_notification)
@@ -175,6 +183,7 @@ def interactive_config() -> None:
         config.enable_notification = answer
 
     # 日志级别
+    print(f"  {t('log_level_hint')}")
     prompt = f"  {t('log_level')} [{config.log_level}]: "
     answer = im.ask_input(
         prompt,
@@ -188,6 +197,7 @@ def interactive_config() -> None:
         config.log_level = answer
 
     # 通知超时时间
+    print(f"  {t('timeout_hint')}")
     prompt = f"  {t('notification_timeout')} [{config.notification_timeout}]: "
     answer = im.ask_input(
         prompt,
@@ -201,6 +211,7 @@ def interactive_config() -> None:
         config.notification_timeout = int(answer)
 
     # 声音类型
+    print(f"  {t('sound_type_hint')}")
     valid_sounds = ["Glass", "Ping", "Pop", "Tink", "Basso"]
     prompt = f"  {t('sound_type')} [{config.sound_type}]: "
     answer = im.ask_input(
@@ -215,6 +226,7 @@ def interactive_config() -> None:
         config.sound_type = answer
 
     # 声音大小
+    print(f"  {t('sound_volume_hint')}")
     volume_str = f"{config.sound_volume:.1f}"
     prompt = f"  {t('sound_volume')} [{volume_str}]: "
     answer = im.ask_input(
@@ -264,6 +276,7 @@ def main() -> None:
 
     # 加载配置并应用命令行参数
     config = load_config()
+    set_language(getattr(config, "language", "zh"))
     config = update_config_from_args(config, args)
 
     # 创建通知器
@@ -276,8 +289,8 @@ def main() -> None:
         event = NotificationEvent(
             type="test",
             agent="vibe-notification",
-            message="测试通知",
-            summary="VibeNotification 测试运行",
+            message=t("test_message"),
+            summary=t("test_summary"),
             timestamp=datetime.now().isoformat(),
             conversation_end=True,
             is_last_turn=True

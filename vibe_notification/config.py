@@ -32,7 +32,11 @@ def load_config(config_path: Optional[os.PathLike | str] = None) -> Notification
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        return NotificationConfig.from_dict(data)
+        config = NotificationConfig.from_dict(data)
+        # 兼容旧配置或手工编辑的语言字段
+        lang = (getattr(config, "language", "zh") or "zh").lower()
+        config.language = lang if lang in ("zh", "en") else "zh"
+        return config
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         # 配置文件损坏，使用默认配置
         print(f"警告：配置文件损坏，使用默认配置: {e}")
@@ -69,5 +73,10 @@ def get_env_config() -> NotificationConfig:
             pass
     if os.environ.get("VIBE_NOTIFICATION_SOUND_TYPE"):
         config.sound_type = os.environ["VIBE_NOTIFICATION_SOUND_TYPE"]
+
+    if os.environ.get("VIBE_NOTIFICATION_LANGUAGE"):
+        lang = os.environ["VIBE_NOTIFICATION_LANGUAGE"].lower()
+        if lang in ("zh", "en"):
+            config.language = lang
 
     return config

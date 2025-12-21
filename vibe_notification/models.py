@@ -39,6 +39,7 @@ class NotificationConfig:
     sound_volume: float = 0.1  # 音量 0.0-1.0，默认 10%
     log_level: str = "INFO"
     detect_conversation_end: bool = True
+    language: str = "zh"  # 语言：zh 或 en
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""

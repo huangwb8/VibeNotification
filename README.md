@@ -4,8 +4,9 @@
 
 ## 安装
 
+- 稳定版（PyPI）：`pip install vibe-notification`
+- 开发版：`pip install -e .`
 - 准备虚拟环境（可选）：`python -m venv venv && source venv/bin/activate`
-- 开发模式安装：`pip install -e .`
 - 验证环境：`python -m vibe_notification --test`（会弹窗并响铃，如果已启用）
 - 交互式配置：`python -m vibe_notification --config`
   - 默认配置文件：`~/.config/vibe-notification/config.json`
@@ -557,3 +558,12 @@ python -m vibe_notification '{"type":"agent-turn-complete"}' --notification 1
 VIBE_NOTIFICATION_SOUND=0 python -m vibe_notification --sound 1 --test
 # 结果：声音仍然被禁用（环境变量覆盖命令行参数）
 ```
+
+## 发布到 PyPI
+
+1. 更新版本号：同时修改 `pyproject.toml` 的 `version` 与 `vibe_notification/__init__.py` 的 `__version__`。
+2. 安装发布工具：`python -m pip install --upgrade build twine`。
+3. 构建发布物：`python -m build`（生成 `dist/` 下的 `.tar.gz` 与 `.whl`）。
+4. 校验包体：`python -m twine check dist/*`。
+5. 上传 PyPI：`TWINE_USERNAME=__token__ TWINE_PASSWORD=<pypi-token> python -m twine upload dist/*`；若先验证，可替换为 `--repository testpypi`。
+6. 安装验证：`pip install -U vibe-notification` 并运行 `python -m vibe_notification --test`。

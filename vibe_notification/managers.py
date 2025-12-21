@@ -16,6 +16,7 @@ from .parsers import BaseParser, ClaudeCodeParser, CodexParser
 from .notifiers import BaseNotifier, SoundNotifier, SystemNotifier
 from .adapters import PlatformAdapter, CommandExecutor, DefaultCommandExecutor, create_platform_adapter
 from .exceptions import NotifierError
+from .i18n import t
 
 
 class ParserManager:
@@ -254,7 +255,7 @@ class NotificationBuilder:
         except Exception as exc:  # pragma: no cover - 极少触发
             self.logger.debug(f"Failed to determine project name from cwd: {exc}")
 
-        return "当前项目"
+        return t("current_project")
 
     def _get_ide_tool_name(self, event: NotificationEvent) -> str:
         """从事件信息推断 IDE 工具名"""
@@ -279,8 +280,8 @@ class NotificationBuilder:
 
         # 组装固定展示内容
         title = custom_title or self._get_project_name(event)
-        message = custom_message or "回复结束啦！"
-        subtitle = f"IDE: {self._get_ide_tool_name(event)}"
+        message = custom_message or t("reply_finished")
+        subtitle = t("subtitle_ide", tool=self._get_ide_tool_name(event))
 
         # 截断过长的消息
         from .utils import truncate_text
@@ -302,9 +303,9 @@ class NotificationBuilder:
         context: str = ""
     ) -> Dict[str, Any]:
         """构建错误通知内容"""
-        title = "VibeNotification — 错误"
+        title = t("error_title")
         message = f"{context}: {str(error)}" if context else str(error)
-        subtitle = "请检查配置或日志"
+        subtitle = t("error_subtitle")
 
         content = {
             "title": title,

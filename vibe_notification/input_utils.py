@@ -92,6 +92,9 @@ class InputManager:
                 # 获取输入
                 if sys.stdin.isatty():
                     ch = self.get_char().lower()
+                    if ch == '\x1b':  # Esc 直接退出
+                        print()
+                        return None
                     if ch == '\r' or ch == '\n':
                         print()
                         return default

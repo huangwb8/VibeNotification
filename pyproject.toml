@@ -8,7 +8,7 @@ version = "1.0.1"
 description = "智能 AI 助手会话结束通知系统"
 readme = "README.md"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Bensz Conan", email = "35643122+huangwb8@users.noreply.github.com"}
 ]
 license = {text = "MIT"}
 classifiers = [
@@ -32,10 +32,10 @@ dependencies = []
 requires-python = ">=3.7"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/VibeNotification"
-Bug-Tracker = "https://github.com/yourusername/VibeNotification/issues"
-Documentation = "https://github.com/yourusername/VibeNotification/docs"
-Source = "https://github.com/yourusername/VibeNotification"
+Homepage = "https://github.com/huangwb8/VibeNotification"
+Bug-Tracker = "https://github.com/huangwb8/VibeNotification/issues"
+Documentation = "https://github.com/huangwb8/VibeNotification#readme"
+Source = "https://github.com/huangwb8/VibeNotification"
 
 [project.scripts]
 vibe-notification = "vibe_notification.cli:main"
@@ -44,3 +44,4 @@ vibe-notify = "vibe_notification.cli:main"
 [tool.setuptools]
 packages = ["vibe_notification", "vibe_notification.notifiers", "vibe_notification.parsers", "vibe_notification.detectors"]
 include-package-data = true
+license-files = ["LICENSE"]

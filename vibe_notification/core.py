@@ -13,6 +13,7 @@ from .config import get_env_config
 from .managers import ParserManager, NotifierManager, NotificationBuilder
 from .factories import AdapterFactory
 from .exceptions import VibeNotificationError
+from .i18n import set_language, t
 
 
 class VibeNotifier:
@@ -20,6 +21,7 @@ class VibeNotifier:
 
     def __init__(self, config: Optional[NotificationConfig] = None):
         self.config = config or get_env_config()
+        set_language(getattr(self.config, "language", "zh"))
         self.logger = logging.getLogger(__name__)
 
         # 设置日志
@@ -65,8 +67,8 @@ class VibeNotifier:
                 event = NotificationEvent(
                     type="test",
                     agent="vibe-notification",
-                    message="测试通知",
-                    summary="VibeNotification 测试运行",
+                    message=t("test_message"),
+                    summary=t("test_summary"),
                     timestamp=datetime.now().isoformat(),
                     conversation_end=True,
                     is_last_turn=True
@@ -83,12 +85,12 @@ class VibeNotifier:
         except VibeNotificationError as e:
             self.logger.error(f"VibeNotification 错误: {e}")
             # 发送错误通知
-            self._send_error_notification(e, "运行时错误")
+            self._send_error_notification(e, t("runtime_error"))
             raise
         except Exception as e:
             self.logger.error(f"未预期的错误: {e}", exc_info=True)
             # 发送错误通知
-            self._send_error_notification(e, "未知错误")
+            self._send_error_notification(e, t("unknown_error"))
             raise
 
     def process_event(self, event: NotificationEvent):

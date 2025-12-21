@@ -6,5 +6,6 @@
   "notification_timeout": 10000,
   "sound_type": "default",
   "log_level": "INFO",
-  "detect_conversation_end": true
+  "detect_conversation_end": true,
+  "language": "zh"
 }
