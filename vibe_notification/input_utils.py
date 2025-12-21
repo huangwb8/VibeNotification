@@ -17,18 +17,25 @@ class InputManager:
     def __init__(self):
         self.old_settings = None
         self.should_exit = False
+        self.raw_mode = False
 
     def __enter__(self):
         """进入上下文管理器，设置终端为原始模式"""
         if sys.stdin.isatty():
             self.old_settings = termios.tcgetattr(sys.stdin)
             tty.setraw(sys.stdin.fileno())
+            # 保留换行转换，避免输出时出现“阶梯式”换行
+            new_settings = termios.tcgetattr(sys.stdin)
+            new_settings[1] |= termios.OPOST | termios.ONLCR
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
+            self.raw_mode = True
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """退出上下文管理器，恢复终端设置"""
         if self.old_settings and sys.stdin.isatty():
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
+            self.raw_mode = False
 
     def get_char(self) -> str:
         """获取单个字符输入"""
@@ -194,15 +201,15 @@ class InputManager:
 
 def select_language() -> str:
     """选择语言"""
-    print("\n" + "="*50)
+    print("\n" + "="*30)
     print(t('select_language'))
     print("1. " + t('chinese'))
     print("2. " + t('english'))
-    print("="*50)
+    print("="*30)
 
     with InputManager() as im:
         while True:
-            print("请选择 (1-2) / Please select (1-2): ", end='', flush=True)
+            print("选择 (1-2): ", end='', flush=True)
 
             # 检查 Esc 键（这里使用默认中文）
             if im.detect_escape():
@@ -220,7 +227,7 @@ def select_language() -> str:
                     print()
                     return "zh"  # 默认中文
                 else:
-                    print("\n输入无效，请输入 1 或 2 / Invalid input, please enter 1 or 2")
+                    print(f"\n{t('invalid_input')} (1-2)")
             else:
                 try:
                     answer = input().strip()
@@ -231,7 +238,7 @@ def select_language() -> str:
                     elif not answer:
                         return "zh"  # 默认中文
                     else:
-                        print("\n输入无效，请输入 1 或 2 / Invalid input, please enter 1 or 2")
+                        print(f"\n{t('invalid_input')} (1-2)")
                 except (EOFError, KeyboardInterrupt):
                     # 非交互式环境或用户中断，返回默认语言
                     return "zh"

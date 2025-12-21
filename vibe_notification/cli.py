@@ -81,6 +81,32 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def get_terminal_width() -> int:
+    """获取终端宽度"""
+    try:
+        import shutil
+        return shutil.get_terminal_size().columns
+    except:
+        return 80  # 默认宽度
+
+
+def format_config_item(label: str, value: str, max_label_len: int, term_width: int) -> str:
+    """格式化配置项，确保在终端内正确显示"""
+    # 如果标签太长，缩写标签
+    if len(label) > max_label_len:
+        label = label[:max_label_len-1] + "·"
+
+    # 计算可用空间
+    available_space = term_width - len(label) - len(value) - 10  # 留出边距和冒号空间
+
+    if available_space < 5:
+        # 空间不足，换行显示
+        return f"  [{label}]:\n    {value}"
+    else:
+        # 单行显示
+        return f"  [{label}]: {value}"
+
+
 def interactive_config() -> None:
     """交互式配置"""
     # 首先选择语言
@@ -92,116 +118,118 @@ def interactive_config() -> None:
     print(f"{t('press_enter_to_skip')}\n")
 
     config = load_config()
+    term_width = get_terminal_width()
 
-    # 显示当前配置 - 使用整齐的格式
+    # 显示当前配置 - 使用适应终端宽度的格式
     print(f"\n{t('current_config')}")
 
-    # 定义字段列表
+    # 定义字段列表，使用更短的标签
     fields = [
         (t('sound_notification'), t('enable') if config.enable_sound else t('disable')),
         (t('system_notification'), t('enable') if config.enable_notification else t('disable')),
         (t('log_level'), config.log_level),
-        (t('notification_timeout'), f"{config.notification_timeout} ms"),
+        (t('notification_timeout'), f"{config.notification_timeout}ms"),
         (t('sound_type'), config.sound_type),
         (t('sound_volume'), f"{config.sound_volume:.1f}")
     ]
 
-    # 计算最大字段长度
-    max_len = max(len(field[0]) for field in fields)
+    # 计算最大字段长度，但限制在合理范围内
+    max_label_len = min(max(len(field[0]) for field in fields), 12)
 
-    # 打印对齐的配置项
+    # 打印格式化的配置项
     for field_name, field_value in fields:
-        padding = max_len - len(field_name) + 2
-        print(f"  [{field_name}]{' ' * padding}: {field_value}")
+        formatted_line = format_config_item(field_name, field_value, max_label_len, term_width)
+        print(formatted_line)
 
-    with InputManager() as im:
-        # 询问是否修改配置
-        print(f"\n{t('modify_config')} ", end='')
-        answer = im.ask_yes_no("", default=True)
-        if answer is None:  # 用户按 Esc
-            print(f"\n{t('config_cancelled')}")
-            return
-        if not answer:
-            return
+    im = InputManager()
 
-        print("\n--- " + t('modify_config') + " ---")
+    # 询问是否修改配置
+    print(f"\n{t('modify_config')} ", end='')
+    answer = im.ask_yes_no("", default=True)
+    if answer is None:  # 用户按 Esc
+        print(f"\n{t('config_cancelled')}")
+        return
+    if not answer:
+        return
 
-        # 声音通知开关
-        current_status = t('enable') if config.enable_sound else t('disable')
-        prompt = f"\n{t('sound_notification')} (y/n) [{current_status}]: "
-        answer = im.ask_yes_no(prompt, default=config.enable_sound)
-        if answer is None:  # 用户按 Esc
-            print(f"\n{t('config_cancelled')}")
-            return
-        if answer is not None:
-            config.enable_sound = answer
+    print(f"\n{t('current_config')}:")
 
-        # 系统通知开关
-        current_status = t('enable') if config.enable_notification else t('disable')
-        prompt = f"{t('system_notification')} (y/n) [{current_status}]: "
-        answer = im.ask_yes_no(prompt, default=config.enable_notification)
-        if answer is None:  # 用户按 Esc
-            print(f"\n{t('config_cancelled')}")
-            return
-        if answer is not None:
-            config.enable_notification = answer
+    # 声音通知开关
+    current_status = t('enable') if config.enable_sound else t('disable')
+    prompt = f"  {t('sound_notification')} (y/n) [{current_status}]: "
+    answer = im.ask_yes_no(prompt, default=config.enable_sound)
+    if answer is None:  # 用户按 Esc
+        print(f"\n{t('config_cancelled')}")
+        return
+    if answer is not None:
+        config.enable_sound = answer
 
-        # 日志级别
-        prompt = f"\n{t('log_level')} (DEBUG/INFO/WARNING/ERROR) [{config.log_level}]: "
-        answer = im.ask_input(
-            prompt,
-            default=config.log_level,
-            validator=lambda x: x in ["DEBUG", "INFO", "WARNING", "ERROR"]
+    # 系统通知开关
+    current_status = t('enable') if config.enable_notification else t('disable')
+    prompt = f"  {t('system_notification')} (y/n) [{current_status}]: "
+    answer = im.ask_yes_no(prompt, default=config.enable_notification)
+    if answer is None:  # 用户按 Esc
+        print(f"\n{t('config_cancelled')}")
+        return
+    if answer is not None:
+        config.enable_notification = answer
+
+    # 日志级别
+    prompt = f"  {t('log_level')} [{config.log_level}]: "
+    answer = im.ask_input(
+        prompt,
+        default=config.log_level,
+        validator=lambda x: x in ["DEBUG", "INFO", "WARNING", "ERROR"]
+    )
+    if answer is None:  # 用户按 Esc
+        print(f"\n{t('config_cancelled')}")
+        return
+    if answer is not None:
+        config.log_level = answer
+
+    # 通知超时时间
+    prompt = f"  {t('notification_timeout')} [{config.notification_timeout}]: "
+    answer = im.ask_input(
+        prompt,
+        default=str(config.notification_timeout),
+        validator=lambda x: x.isdigit() and int(x) > 0
+    )
+    if answer is None:  # 用户按 Esc
+        print(f"\n{t('config_cancelled')}")
+        return
+    if answer is not None:
+        config.notification_timeout = int(answer)
+
+    # 声音类型
+    valid_sounds = ["Glass", "Ping", "Pop", "Tink", "Basso"]
+    prompt = f"  {t('sound_type')} [{config.sound_type}]: "
+    answer = im.ask_input(
+        prompt,
+        default=config.sound_type,
+        validator=lambda x: x in valid_sounds
+    )
+    if answer is None:  # 用户按 Esc
+        print(f"\n{t('config_cancelled')}")
+        return
+    if answer is not None:
+        config.sound_type = answer
+
+    # 声音大小
+    volume_str = f"{config.sound_volume:.1f}"
+    prompt = f"  {t('sound_volume')} [{volume_str}]: "
+    answer = im.ask_input(
+        prompt,
+        default=volume_str,
+        validator=lambda x: (
+            x.replace('.', '', 1).isdigit() and
+            0.0 <= float(x) <= 1.0
         )
-        if answer is None:  # 用户按 Esc
-            print(f"\n{t('config_cancelled')}")
-            return
-        if answer is not None:
-            config.log_level = answer
-
-        # 通知超时时间
-        prompt = f"\n{t('notification_timeout')} (ms) [{config.notification_timeout}]: "
-        answer = im.ask_input(
-            prompt,
-            default=str(config.notification_timeout),
-            validator=lambda x: x.isdigit() and int(x) > 0
-        )
-        if answer is None:  # 用户按 Esc
-            print(f"\n{t('config_cancelled')}")
-            return
-        if answer is not None:
-            config.notification_timeout = int(answer)
-
-        # 声音类型
-        valid_sounds = ["Glass", "Ping", "Pop", "Tink", "Basso"]
-        prompt = f"\n{t('sound_type')} (Glass/Ping/Pop/Tink/Basso) [{config.sound_type}]: "
-        answer = im.ask_input(
-            prompt,
-            default=config.sound_type,
-            validator=lambda x: x in valid_sounds
-        )
-        if answer is None:  # 用户按 Esc
-            print(f"\n{t('config_cancelled')}")
-            return
-        if answer is not None:
-            config.sound_type = answer
-
-        # 声音大小
-        volume_str = f"{config.sound_volume:.1f}"
-        prompt = f"\n{t('sound_volume')} (0.0-1.0) [{volume_str}]: "
-        answer = im.ask_input(
-            prompt,
-            default=volume_str,
-            validator=lambda x: (
-                x.replace('.', '', 1).isdigit() and
-                0.0 <= float(x) <= 1.0
-            )
-        )
-        if answer is None:  # 用户按 Esc
-            print(f"\n{t('config_cancelled')}")
-            return
-        if answer is not None:
-            config.sound_volume = float(answer)
+    )
+    if answer is None:  # 用户按 Esc
+        print(f"\n{t('config_cancelled')}")
+        return
+    if answer is not None:
+        config.sound_volume = float(answer)
 
     # 保存配置
     save_config(config)
