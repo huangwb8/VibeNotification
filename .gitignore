@@ -213,3 +213,4 @@ data/
 *.pid
 *.sock
 *.lock
+nul
