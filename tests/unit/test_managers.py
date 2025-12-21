@@ -2,6 +2,7 @@
 测试管理器模块
 """
 
+import os
 import pytest
 from unittest.mock import Mock, patch
 from vibe_notification.models import NotificationConfig, NotificationEvent, NotificationLevel
@@ -209,6 +210,29 @@ class TestNotificationBuilder:
         assert content["message"] == "回复结束啦！"
         assert content["subtitle"] == "IDE: Claude Code"
         assert content["level"] == NotificationLevel.INFO
+
+    def test_get_project_name_from_metadata_cwd(self, sample_event):
+        """优先使用事件元数据中的 cwd"""
+        sample_event.metadata = {"cwd": "/Users/tester/projects/demo-app"}
+
+        builder = NotificationBuilder()
+        assert builder._get_project_name(sample_event) == "demo-app"
+
+    def test_get_project_name_from_environment_context(self, sample_event):
+        """可以从 environment_context 中提取 cwd"""
+        sample_event.metadata = {
+            "environment_context": "<environment_context><cwd>/tmp/workspace/project-x</cwd></environment_context>"
+        }
+
+        builder = NotificationBuilder()
+        assert builder._get_project_name(sample_event) == "project-x"
+
+    def test_get_project_name_from_codex_env(self, sample_event, monkeypatch):
+        """缺少元数据时回退到 Codex 相关环境变量"""
+        monkeypatch.setenv("CODEX_CWD", "/opt/work/foo-project")
+
+        builder = NotificationBuilder()
+        assert builder._get_project_name(sample_event) == "foo-project"
 
     def test_build_notification_content_custom(self, sample_event):
         """测试构建自定义通知内容"""

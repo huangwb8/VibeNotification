@@ -6,6 +6,9 @@
 
 from typing import List, Optional, Dict, Any
 import logging
+import os
+import re
+import subprocess
 from pathlib import Path
 from .models import NotificationConfig, NotificationEvent, NotificationLevel
 from .parsers import BaseParser, ClaudeCodeParser, CodexParser
@@ -117,14 +120,121 @@ class NotificationBuilder:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-    def _get_project_name(self) -> str:
-        """获取当前项目名称（工作目录名）"""
+    def _extract_name(self, value: Any) -> Optional[str]:
+        """从路径或名称中提取项目名"""
+        if value is None:
+            return None
+
         try:
-            cwd_name = Path.cwd().name
-            if cwd_name:
-                return cwd_name
+            text = str(value).strip()
+        except Exception:
+            return None
+
+        if not text:
+            return None
+
+        try:
+            name = Path(text).name
+        except Exception:
+            name = text
+
+        if not name or name in {os.sep, "."}:
+            return None
+
+        return name
+
+    def _extract_name_from_metadata(self, metadata: Dict[str, Any]) -> Optional[str]:
+        """从事件元数据中提取项目名或路径"""
+        if not isinstance(metadata, dict):
+            return None
+
+        name_keys = (
+            "project_name", "project", "workspace_name", "workspace", "repo_name"
+        )
+        path_keys = (
+            "cwd", "pwd", "working_directory", "workdir",
+            "workspace_dir", "workspace_root", "project_dir",
+            "project_root", "repo_root", "root", "path"
+        )
+
+        for key in name_keys:
+            name = self._extract_name(metadata.get(key))
+            if name:
+                return name
+
+        for key in path_keys:
+            value = metadata.get(key)
+            if isinstance(value, dict):
+                for nested_key in path_keys:
+                    name = self._extract_name(value.get(nested_key))
+                    if name:
+                        return name
+            else:
+                name = self._extract_name(value)
+                if name:
+                    return name
+
+        env_context = metadata.get("environment_context") or metadata.get("context")
+        if isinstance(env_context, str):
+            match = re.search(r"<cwd>(.*?)</cwd>", env_context, re.DOTALL)
+            if match:
+                name = self._extract_name(match.group(1).strip())
+                if name:
+                    return name
+
+        for nested_key in ("metadata", "details"):
+            nested = metadata.get(nested_key)
+            if isinstance(nested, dict):
+                name = self._extract_name_from_metadata(nested)
+                if name:
+                    return name
+
+        return None
+
+    def _get_git_root_name(self, cwd: Optional[str] = None) -> Optional[str]:
+        """尝试通过 git 仓库根目录获取项目名"""
+        for candidate_cwd in (cwd, os.environ.get("PWD"), None):
+            try:
+                result = subprocess.run(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    cwd=candidate_cwd,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    root = result.stdout.strip()
+                    name = self._extract_name(root)
+                    if name:
+                        return name
+            except Exception as exc:  # pragma: no cover - git 不在 PATH 或目录不存在
+                self.logger.debug(f"git root detection failed: {exc}")
+        return None
+
+    def _get_project_name(self, event: Optional[NotificationEvent] = None) -> str:
+        """获取当前项目名称（工作目录名或事件提供的工作区信息）"""
+        if event and event.metadata:
+            name_from_metadata = self._extract_name_from_metadata(event.metadata)
+            if name_from_metadata:
+                return name_from_metadata
+
+        for env_key in ("CODEX_CWD", "CODEX_WORKDIR", "CODEX_WORKSPACE", "PWD", "OLDPWD"):
+            name = self._extract_name(os.environ.get(env_key))
+            if name:
+                return name
+
+        git_name = self._get_git_root_name()
+        if git_name:
+            return git_name
+
+        try:
+            cwd = Path.cwd()
+            for candidate in (cwd, cwd.resolve()):
+                name = self._extract_name(candidate)
+                if name:
+                    return name
         except Exception as exc:  # pragma: no cover - 极少触发
-            self.logger.warning(f"Failed to determine project name: {exc}")
+            self.logger.debug(f"Failed to determine project name from cwd: {exc}")
 
         return "当前项目"
 
@@ -150,7 +260,7 @@ class NotificationBuilder:
         level = NotificationLevel.SUCCESS if event.conversation_end else NotificationLevel.INFO
 
         # 组装固定展示内容
-        title = custom_title or self._get_project_name()
+        title = custom_title or self._get_project_name(event)
         message = custom_message or "回复结束啦！"
         subtitle = f"IDE: {self._get_ide_tool_name(event)}"
 
