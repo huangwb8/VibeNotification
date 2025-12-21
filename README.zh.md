@@ -1,8 +1,17 @@
+<div align="center">
+
 # VibeNotification
+
+[![PyPI](https://img.shields.io/pypi/v/vibe-notification.svg)](https://pypi.org/project/vibe-notification/)
+[![Python](https://img.shields.io/pypi/pyversions/vibe-notification.svg)](https://pypi.org/project/vibe-notification/)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#%E5%AE%89%E8%A3%85)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 [English](README.md) | 中文
 
-在 Claude Code 或 Codex 回复结束时，自动弹出系统通知并播放提示音的轻量工具，让你无需盯着终端等待长任务完成。
+<strong>在 Claude Code 或 Codex 回复结束时自动弹窗+提示音的轻量工具，让你不用守着终端等结果。</strong>
+
+</div>
 
 ## 安装
 

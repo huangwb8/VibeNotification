@@ -1,8 +1,17 @@
+<div align="center">
+
 # VibeNotification
+
+[![PyPI](https://img.shields.io/pypi/v/vibe-notification.svg)](https://pypi.org/project/vibe-notification/)
+[![Python](https://img.shields.io/pypi/pyversions/vibe-notification.svg)](https://pypi.org/project/vibe-notification/)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#installation)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 English | [中文](README.zh.md)
 
-Lightweight notifier that shows a system toast and plays a chime when Claude Code or Codex finishes a reply. Use it as a drop-in hook to avoid staring at the terminal while long runs complete.
+<strong>Toast + chime when Claude Code or Codex finishes—plug in a hook and stop waiting on terminals.</strong>
+
+</div>
 
 ## Installation
 
