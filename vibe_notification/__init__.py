@@ -9,7 +9,7 @@ VibeNotification - 为 Claude Code 和 Codex 提供智能会话结束通知
 5. 详细的日志记录
 """
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __author__ = "Bensz Conan"
 __email__ = "35643122+huangwb8@users.noreply.github.com"
 
