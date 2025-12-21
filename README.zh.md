@@ -1,25 +1,25 @@
 # VibeNotification
 
-English | [中文](README.zh.md)
+[English](README.md) | 中文
 
-Lightweight notifier that shows a system toast and plays a chime when Claude Code or Codex finishes a reply. Use it as a drop-in hook to avoid staring at the terminal while long runs complete.
+在 Claude Code 或 Codex 回复结束时，自动弹出系统通知并播放提示音的轻量工具，让你无需盯着终端等待长任务完成。
 
-## Installation
+## 安装
 
-- Stable (PyPI): `pip install vibe-notification`
-- Dev: `pip install -e .`
-- Optional venv: `python -m venv venv && source venv/bin/activate`
-- Verify: `python -m vibe_notification --test` (should toast and chime when enabled)
-- Interactive setup: `python -m vibe_notification --config`
-  - Default config file: `~/.config/vibe-notification/config.json`
-  - Make sure both sound and system notifications are enabled
+- 稳定版（PyPI）：`pip install vibe-notification`
+- 开发版：`pip install -e .`
+- 可选虚拟环境：`python -m venv venv && source venv/bin/activate`
+- 验证：`python -m vibe_notification --test`（如已启用会弹窗+响铃）
+- 交互式配置：`python -m vibe_notification --config`
+  - 默认配置文件：`~/.config/vibe-notification/config.json`
+  - 请确保声音通知和系统通知均为开启状态
 
-## Quick Start
+## 快速开始
 
 ### Claude Code
 
-- Hooks you can use: `Stop` (on every reply), `SessionEnd` (when the session ends), `SubagentStop` (Task tool completes)
-- Edit `~/.claude/settings.json` and add a Stop hook:
+- 可选钩子：`Stop`（每次回复）、`SessionEnd`（会话结束）、`SubagentStop`（Task 完成）
+- 在 `~/.claude/settings.json` 添加 Stop 钩子：
 
 ```json
 {
@@ -38,7 +38,7 @@ Lightweight notifier that shows a system toast and plays a chime when Claude Cod
 }
 ```
 
-- Example full settings snippet with environment variables:
+- 示例完整配置片段：
 
 ```json
 {
@@ -72,7 +72,7 @@ Lightweight notifier that shows a system toast and plays a chime when Claude Cod
 }
 ```
 
-- Session end only:
+- 仅在会话结束时触发：
 
 ```json
 {
@@ -91,7 +91,7 @@ Lightweight notifier that shows a system toast and plays a chime when Claude Cod
 }
 ```
 
-- Combine multiple hooks (Stop + SessionEnd):
+- 同时启用 Stop 与 SessionEnd：
 
 ```json
 {
@@ -122,13 +122,13 @@ Lightweight notifier that shows a system toast and plays a chime when Claude Cod
 
 ### Codex CLI
 
-Add a notifier command to `~/.codex/config.toml` so Codex triggers VibeNotification on every `agent-turn-complete`:
+在 `~/.codex/config.toml` 中添加通知命令，让 Codex 在 `agent-turn-complete` 时调用 VibeNotification：
 
 ```toml
 notify = ["python3", "-m", "vibe_notification"]
 ```
 
-Typical placement in `config.toml`:
+典型配置位置：
 
 ```toml
 model_provider = "xxx"
@@ -147,17 +147,17 @@ requires_openai_auth = true
 notifications = true
 ```
 
-## Configuration Recipes
+## 配置示例
 
-### Visual only (no sound)
+### 只弹窗不响铃
 
-- Codex `~/.codex/config.toml`:
+- Codex `~/.codex/config.toml`：
 
 ```toml
 notify = ["python3", "-m", "vibe_notification", "--sound", "0"]
 ```
 
-- Claude Code `~/.claude/settings.json`:
+- Claude Code `~/.claude/settings.json`：
 
 ```json
 {
@@ -176,21 +176,21 @@ notify = ["python3", "-m", "vibe_notification", "--sound", "0"]
 }
 ```
 
-- Quick test:
+- 测试：
 
 ```bash
 python -m vibe_notification --sound 0 --test
 ```
 
-### Sound only (no system toast)
+### 只响铃不弹窗
 
-- Codex:
+- Codex：
 
 ```toml
 notify = ["python3", "-m", "vibe_notification", "--notification", "0"]
 ```
 
-- Claude Code:
+- Claude Code：
 
 ```json
 {
@@ -209,32 +209,32 @@ notify = ["python3", "-m", "vibe_notification", "--notification", "0"]
 }
 ```
 
-- Quick test:
+- 测试：
 
 ```bash
 python -m vibe_notification --notification 0 --test
 ```
 
-### Temporary toggles (environment variables)
+### 临时控制（环境变量）
 
-- `VIBE_NOTIFICATION_SOUND=0` — mute sound
-- `VIBE_NOTIFICATION_NOTIFY=0` — disable system notification
-- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` — enable debug logging
+- `VIBE_NOTIFICATION_SOUND=0`：临时禁用声音
+- `VIBE_NOTIFICATION_NOTIFY=0`：临时禁用弹窗
+- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG`：启用调试日志
 
-Codex examples:
+Codex 示例：
 
 ```toml
-# Temporarily mute sound
+# 静音
 notify = ["env", "VIBE_NOTIFICATION_SOUND=0", "python3", "-m", "vibe_notification"]
 
-# Disable all notifications (for debugging)
+# 完全禁用通知
 notify = ["env", "VIBE_NOTIFICATION_NOTIFY=0", "VIBE_NOTIFICATION_SOUND=0", "python3", "-m", "vibe_notification"]
 
-# Enable debug logging
+# 调试日志
 notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_notification"]
 ```
 
-Claude Code example:
+Claude Code 示例：
 
 ```json
 {
@@ -253,7 +253,7 @@ Claude Code example:
 }
 ```
 
-CLI tests:
+测试命令：
 
 ```bash
 VIBE_NOTIFICATION_SOUND=0 python -m vibe_notification --test
@@ -261,17 +261,17 @@ VIBE_NOTIFICATION_SOUND=0 VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification
 VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python -m vibe_notification --test
 ```
 
-### Sound type
+### 声音类型
 
-Available macOS sound types: `Glass` (default), `Ping`, `Pop`, `Tink`, `Basso`.
+可选（macOS 内置）：`Glass`（默认）、`Ping`、`Pop`、`Tink`、`Basso`。
 
 ```toml
 notify = ["env", "VIBE_NOTIFICATION_SOUND_TYPE=Ping", "python3", "-m", "vibe_notification"]
-# Low tone
+# 低音
 notify = ["env", "VIBE_NOTIFICATION_SOUND_TYPE=Basso", "python3", "-m", "vibe_notification"]
 ```
 
-Claude Code:
+Claude Code：
 
 ```json
 {
@@ -290,24 +290,24 @@ Claude Code:
 }
 ```
 
-Test different sounds:
+声音测试：
 
 ```bash
 VIBE_NOTIFICATION_SOUND_TYPE=Tink python -m vibe_notification --test
 VIBE_NOTIFICATION_SOUND_TYPE=Ping python -m vibe_notification --test
 ```
 
-### Volume control
+### 音量控制
 
-Volume range is `0.0–1.0`.
+范围 `0.0–1.0`：
 
 ```toml
 notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.2", "python3", "-m", "vibe_notification"]
 notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.5", "python3", "-m", "vibe_notification"]
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0", "python3", "-m", "vibe_notification"] # mute
+notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0", "python3", "-m", "vibe_notification"] # 静音
 ```
 
-Claude Code:
+Claude Code：
 
 ```json
 {
@@ -326,16 +326,16 @@ Claude Code:
 }
 ```
 
-Quick test:
+快速测试：
 
 ```bash
 VIBE_NOTIFICATION_SOUND_VOLUME=0.1 python -m vibe_notification --test
 VIBE_NOTIFICATION_SOUND_VOLUME=0.8 python -m vibe_notification --test
 ```
 
-### Notification timeout
+### 通知时长
 
-Edit `~/.config/vibe-notification/config.json`:
+编辑 `~/.config/vibe-notification/config.json`：
 
 ```json
 {
@@ -348,91 +348,91 @@ Edit `~/.config/vibe-notification/config.json`:
 }
 ```
 
-- `5000` = 5s auto-dismiss
-- `10000` = 10s (default)
-- `30000` = 30s
-- `0` = sticky, manual close
+- `5000`：5 秒自动消失
+- `10000`：10 秒（默认）
+- `30000`：30 秒
+- `0`：不自动消失
 
-Or use the interactive config:
+或使用交互式配置：
 
 ```bash
 python -m vibe_notification --config
 ```
 
-### Prebuilt combos
+### 组合模式
 
-Focus mode (low volume + toast only + short display):
+专注模式（低音量 + 仅弹窗 + 短时显示）：
 
 ```toml
 notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.1", "VIBE_NOTIFICATION_SOUND_TYPE=Basso", "python3", "-m", "vibe_notification"]
 ```
 
-Meeting mode (sound only, louder, specific tone):
+会议模式（只响铃 + 较高音量 + 特定音色）：
 
 ```toml
 notify = ["env", "VIBE_NOTIFICATION_NOTIFY=0", "VIBE_NOTIFICATION_SOUND_VOLUME=0.7", "VIBE_NOTIFICATION_SOUND_TYPE=Ping", "python3", "-m", "vibe_notification"]
 ```
 
-Debug mode (all on + debug logs):
+调试模式（全启用 + 调试日志）：
 
 ```toml
 notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_notification"]
 ```
 
-## CLI Reference
+## CLI 参考
 
-### Command-line options
+### 命令行参数
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `event_json` | positional | - | Optional Codex event JSON string |
-| `--test` | flag | - | Send a test notification |
-| `--config` | flag | - | Interactive configuration |
-| `--sound {0,1}` | choice | config value | Enable/disable sound (0=off, 1=on) |
-| `--notification {0,1}` | choice | config value | Enable/disable system notification (0=off, 1=on) |
-| `--log-level {DEBUG,INFO,WARNING,ERROR}` | choice | config value | Set log level |
-| `--version` | flag | - | Show version |
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `event_json` | 位置参数 | - | 可选的 Codex 事件 JSON |
+| `--test` | 标志 | - | 发送测试通知 |
+| `--config` | 标志 | - | 交互式配置 |
+| `--sound {0,1}` | 选项 | 配置值 | 0 关闭/1 开启声音 |
+| `--notification {0,1}` | 选项 | 配置值 | 0 关闭/1 开启弹窗 |
+| `--log-level {DEBUG,INFO,WARNING,ERROR}` | 选项 | 配置值 | 设置日志级别 |
+| `--version` | 标志 | - | 显示版本 |
 
-### Config file
+### 配置文件
 
-Location: `~/.config/vibe-notification/config.json`
+位置：`~/.config/vibe-notification/config.json`
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enable_sound` | bool | `true` | Enable sound |
-| `enable_notification` | bool | `true` | Enable system notification |
-| `notification_timeout` | int | `10000` | Duration in ms |
-| `sound_type` | string | `"default"` | Sound type |
-| `log_level` | string | `"INFO"` | Log level |
-| `detect_conversation_end` | bool | `true` | Detect end of conversation |
+| 键 | 类型 | 默认值 | 说明 |
+|----|------|--------|------|
+| `enable_sound` | 布尔 | `true` | 启用声音 |
+| `enable_notification` | 布尔 | `true` | 启用系统通知 |
+| `notification_timeout` | 整数 | `10000` | 显示时长（毫秒） |
+| `sound_type` | 字符串 | `"default"` | 声音类型 |
+| `log_level` | 字符串 | `"INFO"` | 日志级别 |
+| `detect_conversation_end` | 布尔 | `true` | 检测会话结束 |
 
-### Environment variables
+### 环境变量
 
-| Env | Description | Example |
-|-----|-------------|---------|
-| `VIBE_NOTIFICATION_SOUND` | Override sound setting | `VIBE_NOTIFICATION_SOUND=0` |
-| `VIBE_NOTIFICATION_NOTIFY` | Override notification setting | `VIBE_NOTIFICATION_NOTIFY=0` |
-| `VIBE_NOTIFICATION_LOG_LEVEL` | Override log level | `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` |
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `VIBE_NOTIFICATION_SOUND` | 覆盖声音设置 | `VIBE_NOTIFICATION_SOUND=0` |
+| `VIBE_NOTIFICATION_NOTIFY` | 覆盖弹窗设置 | `VIBE_NOTIFICATION_NOTIFY=0` |
+| `VIBE_NOTIFICATION_LOG_LEVEL` | 覆盖日志级别 | `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` |
 
-### Typical commands
+### 常用命令
 
 ```bash
-# Test (toast + sound)
+# 测试（弹窗+声音）
 python -m vibe_notification --test
 
-# Toast only
+# 仅弹窗
 python -m vibe_notification --sound 0 --test
 
-# Sound only
+# 仅声音
 python -m vibe_notification --notification 0 --test
 
-# Debug logs
+# 调试日志
 python -m vibe_notification --log-level DEBUG --test
 ```
 
-### Hook usage examples
+### 钩子示例
 
-Claude Code:
+Claude Code：
 
 ```bash
 echo '{"toolName": "Bash"}' | python -m vibe_notification
@@ -440,7 +440,7 @@ VIBE_NOTIFICATION_SOUND=0 echo '{"toolName": "Task"}' | python -m vibe_notificat
 VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification
 ```
 
-Codex:
+Codex：
 
 ```bash
 python -m vibe_notification '{"type":"agent-turn-complete","agent":"codex","message":"tool Bash done"}'
@@ -448,11 +448,11 @@ python -m vibe_notification '{"type":"agent-turn-complete","agent":"codex"}' --n
 VIBE_NOTIFICATION_SOUND=1 VIBE_NOTIFICATION_NOTIFY=1 python -m vibe_notification '{"type":"agent-turn-complete"}'
 ```
 
-## Publishing to PyPI
+## 发布到 PyPI
 
-1. Bump the version in both `pyproject.toml` and `vibe_notification/__init__.py`.
-2. Install tooling: `python -m pip install --upgrade build twine`.
-3. Build: `python -m build` (creates `.tar.gz` and `.whl` under `dist/`).
-4. Validate: `python -m twine check dist/*`.
-5. Upload: `TWINE_USERNAME=__token__ TWINE_PASSWORD=<pypi-token> python -m twine upload dist/*` (use `--repository testpypi` to dry run).
-6. Install + verify: `pip install -U vibe-notification` then `python -m vibe_notification --test`.
+1. 同步更新版本号：`pyproject.toml` 与 `vibe_notification/__init__.py`。
+2. 安装工具：`python -m pip install --upgrade build twine`。
+3. 构建：`python -m build`（生成 `dist/` 下 `.tar.gz` 与 `.whl`）。
+4. 校验：`python -m twine check dist/*`。
+5. 上传：`TWINE_USERNAME=__token__ TWINE_PASSWORD=<pypi-token> python -m twine upload dist/*`（先验证可用 `--repository testpypi`）。
+6. 安装验证：`pip install -U vibe-notification` 后运行 `python -m vibe_notification --test`。
