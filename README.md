@@ -15,6 +15,8 @@ English | [中文](README.zh.md)
 
 </div>
 
+![image-20251221214216954](https://chevereto.hwb0307.com/images/2025/12/21/image-20251221214216954.png)
+
 ## Installation
 
 - Stable (PyPI): `pip install vibe-notification`
