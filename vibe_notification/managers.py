@@ -6,6 +6,7 @@
 
 from typing import List, Optional, Dict, Any
 import logging
+from pathlib import Path
 from .models import NotificationConfig, NotificationEvent, NotificationLevel
 from .parsers import BaseParser, ClaudeCodeParser, CodexParser
 from .notifiers import BaseNotifier, SoundNotifier, SystemNotifier
@@ -116,6 +117,28 @@ class NotificationBuilder:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
+    def _get_project_name(self) -> str:
+        """获取当前项目名称（工作目录名）"""
+        try:
+            cwd_name = Path.cwd().name
+            if cwd_name:
+                return cwd_name
+        except Exception as exc:  # pragma: no cover - 极少触发
+            self.logger.warning(f"Failed to determine project name: {exc}")
+
+        return "当前项目"
+
+    def _get_ide_tool_name(self, event: NotificationEvent) -> str:
+        """从事件信息推断 IDE 工具名"""
+        for candidate in (event.agent, event.tool_name):
+            lower = (candidate or "").lower()
+            if "claude" in lower:
+                return "Claude Code"
+            if "codex" in lower:
+                return "Codex"
+
+        return event.agent or event.tool_name or "IDE"
+
     def build_notification_content(
         self,
         event: NotificationEvent,
@@ -124,26 +147,12 @@ class NotificationBuilder:
     ) -> Dict[str, Any]:
         """构建通知内容"""
         # 根据事件类型决定通知级别
-        if event.conversation_end:
-            level = NotificationLevel.SUCCESS
-            default_title = f"{event.agent} — 会话结束"
-        else:
-            level = NotificationLevel.INFO
-            default_title = f"{event.agent} — 操作完成"
+        level = NotificationLevel.SUCCESS if event.conversation_end else NotificationLevel.INFO
 
-        # 使用自定义内容或默认内容
-        title = custom_title or default_title
-
-        if custom_message:
-            message = custom_message
-        else:
-            message = (
-                event.summary or
-                event.message or
-                ("会话已结束" if event.conversation_end else "操作已完成")
-            )
-
-        subtitle = f"工具: {event.tool_name}" if event.tool_name else event.agent
+        # 组装固定展示内容
+        title = custom_title or self._get_project_name()
+        message = custom_message or "回复结束啦！"
+        subtitle = f"IDE: {self._get_ide_tool_name(event)}"
 
         # 截断过长的消息
         from .utils import truncate_text

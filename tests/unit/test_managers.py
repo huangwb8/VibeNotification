@@ -11,6 +11,7 @@ from vibe_notification.managers import (
     NotificationBuilder
 )
 from vibe_notification.parsers import BaseParser
+from vibe_notification.parsers.codex import CodexParser
 from vibe_notification.notifiers import BaseNotifier
 from vibe_notification.exceptions import NotifierError
 from tests.conftest import mock_config, sample_event, mock_platform_adapter
@@ -29,7 +30,8 @@ class TestParserManager:
     def test_get_available_parser(self):
         """测试获取可用解析器"""
         manager = ParserManager()
-        parser = manager.get_available_parser()
+        with patch.object(CodexParser, "can_parse", return_value=True):
+            parser = manager.get_available_parser()
         assert parser is not None
         assert isinstance(parser, BaseParser)
 
@@ -186,11 +188,12 @@ class TestNotificationBuilder:
     def test_build_notification_content_conversation_end(self, sample_event):
         """测试构建会话结束通知内容"""
         builder = NotificationBuilder()
+        expected_title = builder._get_project_name()
         content = builder.build_notification_content(sample_event)
 
-        assert content["title"] == "claude-code — 会话结束"
-        assert "会话已完成" in content["message"]
-        assert content["subtitle"] == "工具: claude-code"
+        assert content["title"] == expected_title
+        assert content["message"] == "回复结束啦！"
+        assert content["subtitle"] == "IDE: Claude Code"
         assert content["level"] == NotificationLevel.SUCCESS
 
     def test_build_notification_content_operation_complete(self, sample_event):
@@ -199,9 +202,12 @@ class TestNotificationBuilder:
         sample_event.conversation_end = False
 
         builder = NotificationBuilder()
+        expected_title = builder._get_project_name()
         content = builder.build_notification_content(sample_event)
 
-        assert content["title"] == "claude-code — 操作完成"
+        assert content["title"] == expected_title
+        assert content["message"] == "回复结束啦！"
+        assert content["subtitle"] == "IDE: Claude Code"
         assert content["level"] == NotificationLevel.INFO
 
     def test_build_notification_content_custom(self, sample_event):
@@ -229,9 +235,12 @@ class TestNotificationBuilder:
         )
 
         builder = NotificationBuilder()
+        expected_title = builder._get_project_name()
         content = builder.build_notification_content(event)
 
-        assert content["message"] == "会话已结束"
+        assert content["title"] == expected_title
+        assert content["message"] == "回复结束啦！"
+        assert content["subtitle"] == "IDE: test-agent"
 
     def test_build_error_notification(self):
         """测试构建错误通知内容"""
