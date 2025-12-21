@@ -9,7 +9,8 @@
       "Bash(/Volumes/2T01/softwares/anoconda/anaconda3/bin/python:*)",
       "Bash(grep:*)",
       "Bash(python3:*)",
-      "Bash(CLAUDE_HOOK_EVENT=SessionEnd /Volumes/2T01/softwares/anoconda/anaconda3/bin/python:*)"
+      "Bash(CLAUDE_HOOK_EVENT=SessionEnd /Volumes/2T01/softwares/anoconda/anaconda3/bin/python:*)",
+      "Bash(powershell.exe:*)"
     ]
   }
 }

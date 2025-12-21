@@ -305,11 +305,18 @@ class WindowsAdapter(PlatformAdapter):
         '''
 
         # 尝试执行Toast通知
+        self.logger.debug(f"Attempting to send Toast notification: {full_title}")
         command = ["powershell.exe", "-Command", ps_command_toast]
         result = self.executor.execute(command)
 
+        if result.stdout:
+            self.logger.debug(f"Toast stdout: {result.stdout.strip()}")
+        if result.stderr:
+            self.logger.debug(f"Toast stderr: {result.stderr.strip()}")
+
         # 如果Toast失败，回退到NotifyIcon
         if not result.success:
+            self.logger.warning("Toast notification failed, falling back to NotifyIcon")
             ps_command = f'''
             Add-Type -AssemblyName System.Windows.Forms;
             Add-Type -AssemblyName System.Drawing;
@@ -319,14 +326,19 @@ class WindowsAdapter(PlatformAdapter):
             $notification.BalloonTipText = "{message}";
             $notification.Visible = $true;
             $notification.ShowBalloonTip(10000);
-            Start-Sleep 1;
+            Write-Host "NotifyIcon notification sent"
+            Start-Sleep 2;
             $notification.Dispose();
             '''
 
             command = ["powershell.exe", "-Command", ps_command]
             result = self.executor.execute(command)
-            if not result.success:
+            if result.success:
+                self.logger.info("NotifyIcon fallback succeeded")
+            else:
                 self.logger.warning(f"Failed to show notification: {result.stderr}")
+        else:
+            self.logger.info("Toast notification sent successfully")
 
     def is_sound_available(self) -> bool:
         """检查 PowerShell 是否可用"""
