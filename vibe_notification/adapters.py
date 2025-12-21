@@ -309,11 +309,23 @@ def create_platform_adapter(executor: CommandExecutor) -> PlatformAdapter:
     """创建平台适配器"""
     platform_info = get_platform_info()
 
+    # 检查是否在WSL环境中
+    is_wsl = False
+    if platform_info["system"] == "Linux":
+        try:
+            with open("/proc/version", "r") as f:
+                version_info = f.read().lower()
+                if "microsoft" in version_info or "wsl" in version_info:
+                    is_wsl = True
+        except:
+            pass
+
     if platform_info["system"] == "Darwin":
         return MacOSAdapter(executor)
+    elif is_wsl or platform_info["system"] == "Windows":
+        # WSL环境使用Windows适配器
+        return WindowsAdapter(executor)
     elif platform_info["system"] == "Linux":
         return LinuxAdapter(executor)
-    elif platform_info["system"] == "Windows":
-        return WindowsAdapter(executor)
     else:
         raise UnsupportedPlatformError(platform_info["system"])

@@ -42,7 +42,6 @@ htmlcov/
 .nox/
 .coverage
 .coverage.*
-.cache
 nosetests.xml
 coverage.xml
 *.cover
@@ -56,7 +55,6 @@ cover/
 *.pot
 
 # Django stuff:
-*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -113,6 +111,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
+.env.*.local
 .venv
 env/
 venv/
@@ -173,5 +173,43 @@ test_output/
 *.temp
 
 # Cache
-.cache/
-tests/上传prompts.md
+tests/
+tests/upload_prompts.md
+
+# Python build outputs
+.pybuild/
+build/
+
+# IDE specific settings
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+
+# Package managers
+Pipfile.lock
+poetry.lock
+
+# OS generated files
+.DS_Store?
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Audio files (if temporary)
+*.wav.tmp
+*.mp3.tmp
+*.ogg.tmp
+
+# User data
+user_data/
+data/
+*.db
+*.sqlite
+
+# Runtime files
+*.pid
+*.sock
+*.lock
