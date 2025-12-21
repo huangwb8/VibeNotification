@@ -300,6 +300,160 @@ VIBE_NOTIFICATION_SOUND=0 VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification
 VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python -m vibe_notification --test
 ```
 
+#### 声音类型自定义
+
+> 支持多种系统内置声音，可根据个人偏好选择
+
+**可用声音类型：**
+
+- `Glass` - 玻璃音效（默认）
+- `Ping` - 清脆提示音
+- `Pop` - 气泡音效
+- `Tink` - 叮当声
+- `Basso` - 低音提示
+
+**Codex 配置：**
+
+```toml
+# 在 ~/.codex/config.toml 中设置不同声音类型
+notify = ["env", "VIBE_NOTIFICATION_SOUND_TYPE=Ping", "python3", "-m", "vibe_notification"]
+
+# 使用低音提示音
+notify = ["env", "VIBE_NOTIFICATION_SOUND_TYPE=Basso", "python3", "-m", "vibe_notification"]
+```
+
+**Claude Code 配置：**
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env VIBE_NOTIFICATION_SOUND_TYPE=Pop python -m vibe_notification"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**测试命令：**
+
+```bash
+# 测试不同声音类型
+VIBE_NOTIFICATION_SOUND_TYPE=Tink python -m vibe_notification --test
+VIBE_NOTIFICATION_SOUND_TYPE=Ping python -m vibe_notification --test
+```
+
+#### 音量控制
+
+> 精确控制提示音音量，适合不同环境需求
+
+**Codex 配置：**
+
+```toml
+# 设置音量为 20% (0.0-1.0)
+notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.2", "python3", "-m", "vibe_notification"]
+
+# 设置音量为 50%
+notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.5", "python3", "-m", "vibe_notification"]
+
+# 静音模式（音量设为 0）
+notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0", "python3", "-m", "vibe_notification"]
+```
+
+**Claude Code 配置：**
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env VIBE_NOTIFICATION_SOUND_VOLUME=0.3 python -m vibe_notification"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**测试命令：**
+
+```bash
+# 测试不同音量
+VIBE_NOTIFICATION_SOUND_VOLUME=0.1 python -m vibe_notification --test
+VIBE_NOTIFICATION_SOUND_VOLUME=0.8 python -m vibe_notification --test
+```
+
+#### 通知持续时间控制
+
+> 在配置文件中设置通知显示时间
+
+**配置文件修改：**
+
+```bash
+# 编辑配置文件
+~/.config/vibe-notification/config.json
+```
+
+```json
+{
+  "enable_sound": true,
+  "enable_notification": true,
+  "notification_timeout": 5000,
+  "sound_type": "Glass",
+  "sound_volume": 0.1,
+  "log_level": "INFO"
+}
+```
+
+**超时时间说明：**
+
+- `5000` - 5秒自动消失
+- `10000` - 10秒自动消失（默认）
+- `30000` - 30秒自动消失
+- `0` - 不会自动消失（需要手动关闭）
+
+**交互式配置：**
+
+```bash
+# 通过交互式配置界面设置
+python -m vibe_notification --config
+```
+
+#### 高级组合配置
+
+> 组合多个环境变量实现个性化通知
+
+**工作专注模式：**
+
+```bash
+# 低音量 + 只弹窗 + 短时间显示
+notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.1", "VIBE_NOTIFICATION_SOUND_TYPE=Basso", "python3", "-m", "vibe_notification"]
+```
+
+**会议模式：**
+
+```bash
+# 只响铃 + 高音量 + 特定声音
+notify = ["env", "VIBE_NOTIFICATION_NOTIFY=0", "VIBE_NOTIFICATION_SOUND_VOLUME=0.7", "VIBE_NOTIFICATION_SOUND_TYPE=Ping", "python3", "-m", "vibe_notification"]
+```
+
+**调试模式：**
+
+```bash
+# 启用所有通知 + 调试日志 + 长时间显示
+notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_notification"]
+```
+
 ## 进阶使用
 
 ### 命令行参数
