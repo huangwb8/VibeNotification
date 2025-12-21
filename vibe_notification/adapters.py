@@ -281,20 +281,52 @@ class WindowsAdapter(PlatformAdapter):
     def show_notification(self, title: str, message: str, subtitle: str = "") -> None:
         """使用 Windows Toast 通知"""
         full_title = f"{title} - {subtitle}" if subtitle else title
-        ps_command = f'''
-        Add-Type -AssemblyName System.Windows.Forms;
-        $notification = New-Object System.Windows.Forms.NotifyIcon;
-        $notification.Icon = [System.Drawing.SystemIcons]::Information;
-        $notification.BalloonTipTitle = "{full_title}";
-        $notification.BalloonTipText = "{message}";
-        $notification.Visible = $true;
-        $notification.ShowBalloonTip(5000);
+
+        # 先尝试使用Toast通知（Windows 10/11）
+        ps_command_toast = f'''
+        try {{
+            Add-Type -AssemblyName System.Runtime.WindowsRuntime
+            $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where {{ $_.Name -eq 'AsTask' }} | Where {{$_.GetParameters().Count -eq 1}})[0]
+            Function Await($WinRtTask, $ResultSig) {{
+                $asTask = $asTaskGeneric.MakeGenericMethod($ResultSig)
+                $netTask = $asTask.Invoke($null, @($WinRtTask))
+                $netTask.Wait(-1) | Out-Null
+            }}
+            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+            [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+            [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null
+            $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+            $xml.LoadXml("<toast><visual><binding template='ToastGeneric'><text>{full_title}</text><text>{message}</text></binding></visual></toast>")
+            $toast = New-Object Windows.UI.Notifications.ToastNotification($xml)
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("VibeNotification").Show($toast)
+        }} catch {{
+            exit 1
+        }}
         '''
 
-        command = ["powershell.exe", "-Command", ps_command]
+        # 尝试执行Toast通知
+        command = ["powershell.exe", "-Command", ps_command_toast]
         result = self.executor.execute(command)
+
+        # 如果Toast失败，回退到NotifyIcon
         if not result.success:
-            self.logger.warning(f"Failed to show notification: {result.stderr}")
+            ps_command = f'''
+            Add-Type -AssemblyName System.Windows.Forms;
+            Add-Type -AssemblyName System.Drawing;
+            $notification = New-Object System.Windows.Forms.NotifyIcon;
+            $notification.Icon = [System.Drawing.SystemIcons]::Information;
+            $notification.BalloonTipTitle = "{full_title}";
+            $notification.BalloonTipText = "{message}";
+            $notification.Visible = $true;
+            $notification.ShowBalloonTip(10000);
+            Start-Sleep 1;
+            $notification.Dispose();
+            '''
+
+            command = ["powershell.exe", "-Command", ps_command]
+            result = self.executor.execute(command)
+            if not result.success:
+                self.logger.warning(f"Failed to show notification: {result.stderr}")
 
     def is_sound_available(self) -> bool:
         """检查 PowerShell 是否可用"""
