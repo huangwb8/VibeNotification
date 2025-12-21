@@ -10,12 +10,11 @@ readme = "README.md"
 authors = [
     {name = "Bensz Conan", email = "35643122+huangwb8@users.noreply.github.com"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
@@ -44,4 +43,3 @@ vibe-notify = "vibe_notification.cli:main"
 [tool.setuptools]
 packages = ["vibe_notification", "vibe_notification.notifiers", "vibe_notification.parsers", "vibe_notification.detectors"]
 include-package-data = true
-license-files = ["LICENSE"]
