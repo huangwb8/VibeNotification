@@ -22,37 +22,72 @@
 
 Claude Code 提供了多种钩子事件，您可以根据需要选择：
 
-#### 每次回复完成时通知（推荐）✨
+#### AI回复完成时通知
 
-**适用场景**：希望 Claude 每次完成回复后立即收到通知，方便及时查看结果。
+> 希望 Claude 每次完成回复后立即收到通知，方便及时查看结果。这是最好的特性！
 
-1. **编辑配置文件**：
-   ```bash
-   # 配置文件路径
-   ~/.claude/settings.json
-   ```
+- **编辑配置文件**：
+```bash
+# 配置文件路径
+~/.claude/settings.json
+```
 
-2. **添加 Stop 钩子**：
-   ```json
-   {
-     "hooks": {
-       "Stop": [
-         {
-           "hooks": [
-             {
-               "type": "command",
-               "command": "python -m vibe_notification"
-             }
-           ]
-         }
-       ]
-     }
-   }
-   ```
+- **添加 Stop 钩子**：
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m vibe_notification"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+- 设置在settings.json里的具体位置
+
+```json
+
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "xxx",
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.6",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-4.6",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.6",
+    "ANTHROPIC_MODEL": "glm-4.6",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "DISABLE_TELEMETRY": "1",
+    "MCP_TIMEOUT": "60000"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "python -m vibe_notification",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "includeCoAuthoredBy": false,
+  "outputStyle": "engineer-professional"
+}
+```
 
 #### 会话结束时通知
 
-**适用场景**：仅在退出 Claude Code 时收到通知。并不实用，但还是配置了。
+> 仅在退出 Claude Code 时收到通知。个人感觉并不实用。
 
 ```json
 {
@@ -73,7 +108,7 @@ Claude Code 提供了多种钩子事件，您可以根据需要选择：
 
 #### 同时使用多个钩子
 
-**适用场景**：既想知道每次回复完成，也想知道会话结束。
+> 既想知道每次回复完成，也想知道会话结束。
 
 ```json
 {
@@ -102,8 +137,6 @@ Claude Code 提供了多种钩子事件，您可以根据需要选择：
 }
 ```
 
-
-
 ### Codex
 
 > 如果希望在 Codex CLI里回复结束自动通知，可在 Codex `~/.codex/config.toml` 里配置 `notify`，让 Codex 在每次 `agent-turn-complete` 时调用 VibeNotification。  
@@ -117,18 +150,18 @@ Claude Code 提供了多种钩子事件，您可以根据需要选择：
 notify = ["python3", "-m", "vibe_notification"] 
 ```
 
-这是一个实际配置文件的一部分：
+- 相关配置在config.toml文件的位置如下：
 
 ```toml
-model_provider = "packycode"
+model_provider = "xxx"
 model = "gpt-5.1-codex-max"
 model_reasoning_effort = "medium"
 disable_response_storage = true
 notify = ["python3", "-m", "vibe_notification"]
 
-[model_providers.packycode]
-name = "packycode"
-base_url = "https://codex-api.packycode.com/v1"
+[model_providers.xxx]
+name = "xxx"
+base_url = "https://xxx/v1"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -136,33 +169,19 @@ requires_openai_auth = true
 notifications = true
 ```
 
-Codex 会把当前回合的事件 JSON 作为最后一个参数传入 `notify`，`CodexParser` 会自动读取 `type`/`finish_reason`/`tool_name` 等字段来判断是否是“本轮已完成”，无需额外处理。
+### 其它配置
 
-快速自测（确认弹窗+响铃）：  
-```bash
-python -m vibe_notification '{"type":"agent-turn-complete","agent":"codex","message":"turn done"}'
-```
+#### 只弹窗不响铃
 
-典型事件 JSON（Codex 默认传入的形态）：
-```json
-{
-  "type": "agent-turn-complete",
-  "agent": "codex",
-  "message": "tool Bash finished",
-  "tool_name": "Bash",
-  "timestamp": 1719999999,
-  "metadata": {
-    "turn": 3,
-    "sessionId": "abc-123"
-  }
-}
-```
+`notify = ["python3","-m","vibe_notification","--sound","0"]`
 
-#### 其它配置
+#### 只响铃不弹窗
 
-- 只弹窗不响铃：`notify = ["python3","-m","vibe_notification","--sound","0"]`
-- 只响铃不弹窗：`notify = ["python3","-m","vibe_notification","--notification","0"]`
-- 临时控制：在命令前增加环境变量，例如 `notify = ["env","VIBE_NOTIFICATION_SOUND=0","python3","-m","vibe_notification"]`
+`notify = ["python3","-m","vibe_notification","--notification","0"]`
+
+#### 临时控制
+
+在命令前增加环境变量，例如 `notify = ["env","VIBE_NOTIFICATION_SOUND=0","python3","-m","vibe_notification"]`
 
 ## 进阶使用
 
