@@ -173,15 +173,132 @@ notifications = true
 
 #### 只弹窗不响铃
 
-`notify = ["python3","-m","vibe_notification","--sound","0"]`
+> 适用于需要视觉提醒但保持环境安静的场合
+
+**Codex 配置：**
+
+```toml
+# 在 ~/.codex/config.toml 中设置
+notify = ["python3", "-m", "vibe_notification", "--sound", "0"]
+```
+
+**Claude Code 配置：**
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m vibe_notification --sound 0"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**测试命令：**
+
+```bash
+# 验证只弹窗不响铃效果
+python -m vibe_notification --sound 0 --test
+```
 
 #### 只响铃不弹窗
 
-`notify = ["python3","-m","vibe_notification","--notification","0"]`
+> 适用于需要听觉提醒但不希望被打断工作流的场景
+
+**Codex 配置：**
+
+```toml
+# 在 ~/.codex/config.toml 中设置
+notify = ["python3", "-m", "vibe_notification", "--notification", "0"]
+```
+
+**Claude Code 配置：**
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m vibe_notification --notification 0"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**测试命令：**
+
+```bash
+# 验证只响铃不弹窗效果
+python -m vibe_notification --notification 0 --test
+```
 
 #### 临时控制
 
-在命令前增加环境变量，例如 `notify = ["env","VIBE_NOTIFICATION_SOUND=0","python3","-m","vibe_notification"]`
+> 无需修改配置文件，通过环境变量灵活控制通知行为
+
+**环境变量说明：**
+
+- `VIBE_NOTIFICATION_SOUND=0` - 临时禁用声音通知
+- `VIBE_NOTIFICATION_NOTIFY=0` - 临时禁用系统通知
+- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` - 临时设置调试日志级别
+
+**Codex 配置：**
+
+```toml
+# 在 ~/.codex/config.toml 中设置临时禁用声音
+notify = ["env", "VIBE_NOTIFICATION_SOUND=0", "python3", "-m", "vibe_notification"]
+
+# 完全禁用通知（调试用）
+notify = ["env", "VIBE_NOTIFICATION_NOTIFY=0", "VIBE_NOTIFICATION_SOUND=0", "python3", "-m", "vibe_notification"]
+
+# 启用调试日志
+notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_notification"]
+```
+
+**Claude Code 配置：**
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env VIBE_NOTIFICATION_SOUND=0 python -m vibe_notification"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**测试命令：**
+
+```bash
+# 临时禁用声音通知
+VIBE_NOTIFICATION_SOUND=0 python -m vibe_notification --test
+
+# 临时禁用所有通知
+VIBE_NOTIFICATION_SOUND=0 VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification --test
+
+# 临时启用调试日志
+VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python -m vibe_notification --test
+```
 
 ## 进阶使用
 
