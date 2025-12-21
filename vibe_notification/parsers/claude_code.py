@@ -52,13 +52,14 @@ class ClaudeCodeParser(BaseParser):
 
         # Stop 事件 - Claude 完成一次完整回复
         if hook_event == "Stop":
+            # Stop 事件通常表示一次完整的回复结束，应该触发通知
             return NotificationEvent(
                 type="agent-turn-complete",
                 agent="claude-code",
                 message="Claude 回复完成",
                 summary="Claude Code 已完成回复",
                 timestamp=datetime.now().isoformat(),
-                conversation_end=False,
+                conversation_end=True,  # Stop 事件表示回复完成，应该触发会话结束通知
                 is_last_turn=True,
                 metadata={"event": "Stop", "source": "hook"}
             )
@@ -71,16 +72,23 @@ class ClaudeCodeParser(BaseParser):
                 message="子代理完成任务",
                 summary="Claude Code 子代理已完成",
                 timestamp=datetime.now().isoformat(),
-                conversation_end=False,
+                conversation_end=True,  # 子代理完成也表示一次任务完成
                 is_last_turn=True,
                 metadata={"event": "SubagentStop", "source": "hook"}
             )
 
         # SessionEnd 事件 - 会话结束
         if hook_event == "SessionEnd":
-            # 退出 Claude Code 时不再发送通知
-            self.logger.info("检测到 SessionEnd 事件，跳过通知发送")
-            return None
+            return NotificationEvent(
+                type="session-end",
+                agent="claude-code",
+                message="Claude 会话结束",
+                summary="Claude Code 会话已结束",
+                timestamp=datetime.now().isoformat(),
+                conversation_end=True,
+                is_last_turn=True,
+                metadata={"event": "SessionEnd", "source": "hook"}
+            )
 
         # PostToolUse 事件 - 工具调用完成后
         if hook_event == "PostToolUse":
@@ -129,28 +137,30 @@ class ClaudeCodeParser(BaseParser):
                 if hook_input:
                     hook_data = json.loads(hook_input)
 
+                    tool_name = hook_data.get("toolName") or hook_data.get("tool_name")
+                    conversation_end = detect_conversation_end_from_hook(hook_data)
+
                     # 根据数据类型处理
-                    if "toolName" in hook_data or "tool_name" in hook_data:
-                        # 工具相关数据
-                        tool_name = hook_data.get("toolName") or hook_data.get("tool_name", "unknown")
-
-                        # 检测是否是会话结束
-                        conversation_end = detect_conversation_end_from_hook(hook_data)
-
-                        return NotificationEvent(
-                            type="tool-complete",
-                            agent="claude-code",
-                            message=f"使用工具: {tool_name}",
-                            summary=f"Claude Code 完成了 {tool_name} 操作",
-                            timestamp=datetime.now().isoformat(),
-                            tool_name=tool_name,
-                            conversation_end=conversation_end,
-                            is_last_turn=conversation_end,
-                            metadata={"source": "stdin", "data": hook_data}
-                        )
+                    if tool_name:
+                        message = f"使用工具: {tool_name}"
+                        summary = f"Claude Code 完成了 {tool_name} 操作"
+                        event_type = "tool-complete"
                     else:
-                        # 其他类型的数据
-                        self.logger.debug(f"收到非工具相关的 stdin 数据: {hook_input[:100]}...")
+                        message = hook_data.get("message") or "Claude Code 操作完成"
+                        summary = hook_data.get("summary") or message
+                        event_type = "agent-turn-complete" if conversation_end else "operation-complete"
+
+                    return NotificationEvent(
+                        type=event_type,
+                        agent="claude-code",
+                        message=message,
+                        summary=summary,
+                        timestamp=datetime.now().isoformat(),
+                        tool_name=tool_name,
+                        conversation_end=conversation_end,
+                        is_last_turn=conversation_end,
+                        metadata={"source": "stdin", "data": hook_data}
+                    )
 
         except json.JSONDecodeError as e:
             self.logger.error(f"解析 stdin JSON 数据失败: {e}")
