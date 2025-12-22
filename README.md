@@ -9,7 +9,7 @@
 
 English | [中文](README.zh.md)
 
-<strong>Toast + chime when Claude Code or Codex finishes—plug in a hook and stop waiting on terminals.</strong>
+<strong> Stop waiting when vibe coding — Give a notification when Claude Code or Codex finishes replies — </strong>
 
 [Blog walkthrough (Chinese): AI应用系列 一个简单的Vibe coding的通知系统](https://blognas.hwb0307.com/ai/6659)
 
