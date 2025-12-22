@@ -214,3 +214,5 @@ data/
 *.sock
 *.lock
 nul
+docs/上传prompts.md
+docs/推广.md
