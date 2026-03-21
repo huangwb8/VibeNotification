@@ -45,7 +45,10 @@ class ParserFactory:
             if not parser_type:
                 continue
 
-            parser = ParserFactory.create_parser(parser_type)
+            try:
+                parser = ParserFactory.create_parser(parser_type)
+            except ValueError:
+                continue
 
             # 如果解析器有配置方法，应用配置
             if hasattr(parser, "configure") and config.get("config"):

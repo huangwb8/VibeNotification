@@ -161,8 +161,8 @@ class TestAdapterFactory:
 
         assert isinstance(executor, DefaultCommandExecutor)
 
-    @patch('vibe_notification.adapters.create_platform_adapter')
-    @patch('vibe_notification.adapters.DefaultCommandExecutor')
+    @patch('vibe_notification.factories.create_platform_adapter')
+    @patch('vibe_notification.factories.DefaultCommandExecutor')
     def test_create_platform_adapter_default_executor(
         self, mock_executor_class, mock_create_adapter
     ):
@@ -176,7 +176,7 @@ class TestAdapterFactory:
         mock_executor_class.assert_called_once()
         mock_create_adapter.assert_called_once_with(mock_executor)
 
-    @patch('vibe_notification.adapters.create_platform_adapter')
+    @patch('vibe_notification.factories.create_platform_adapter')
     def test_create_platform_adapter_custom_executor(self, mock_create_adapter):
         """测试使用自定义执行器创建平台适配器"""
         mock_executor = Mock(spec=DefaultCommandExecutor)

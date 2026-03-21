@@ -1,33 +1,34 @@
 #!/usr/bin/env python3
 """
-测试Windows通知系统
+Windows 通知链路的手工验证测试。
+
+默认跳过，避免在非 Windows / 非交互环境里直接调用 PowerShell。
+如需手工验证，可运行：
+    VIBE_NOTIFICATION_RUN_WINDOWS_TEST=1 pytest tests/test_notification.py -q -s
 """
 
-import subprocess
-import sys
-sys.path.insert(0, 'vibe_notification')
+from __future__ import annotations
 
-from vibe_notification.adapters import WindowsAdapter, DefaultCommandExecutor
-from vibe_notification.models import NotificationConfig
+import os
+import shutil
+
+import pytest
+
+from vibe_notification.adapters import DefaultCommandExecutor, WindowsAdapter
+
 
 def test_notification():
-    # 创建配置
-    config = NotificationConfig()
+    if os.environ.get("VIBE_NOTIFICATION_RUN_WINDOWS_TEST") != "1":
+        pytest.skip("需要设置 VIBE_NOTIFICATION_RUN_WINDOWS_TEST=1 才运行手工 Windows 通知测试")
 
-    # 创建Windows适配器
+    if not shutil.which("powershell.exe"):
+        pytest.skip("当前环境没有 powershell.exe")
+
     executor = DefaultCommandExecutor()
     adapter = WindowsAdapter(executor)
 
-    print(f"PowerShell可用: {adapter.is_notification_available()}")
-
-    # 发送测试通知
     title = "VibeNotification 测试"
     message = "这是一个测试消息"
     subtitle = "WSL测试"
 
-    print(f"发送通知: {title} - {message}")
     adapter.show_notification(title, message, subtitle)
-    print("通知命令已执行")
-
-if __name__ == "__main__":
-    test_notification()

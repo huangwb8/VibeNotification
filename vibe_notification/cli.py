@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
   echo '{"toolName": "Task"}' | python -m vibe_notification
 
   # 作为 Codex 钩子使用
-  python -m vibe_notification '{"type": "agent-turn-complete", "agent": "codex"}'
+  python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}'
 
   # 测试模式
   python -m vibe_notification --test

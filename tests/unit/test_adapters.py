@@ -133,7 +133,7 @@ class TestMacOSAdapter:
         mock_executor.execute.assert_called_once()
         args = mock_executor.execute.call_args[0][0]
         assert "afplay" in args
-        assert any("Glass" in arg for arg in args)
+        assert any("Ping" in arg for arg in args)
 
     def test_play_sound_success(self, mock_executor):
         """测试播放成功声音"""
@@ -149,9 +149,10 @@ class TestMacOSAdapter:
         adapter = MacOSAdapter(mock_executor)
         sound_file = "/path/to/sound.wav"
 
-        adapter.play_sound(sound_file=sound_file)
+        with patch('pathlib.Path.exists', return_value=True):
+            adapter.play_sound(sound_file=sound_file)
 
-        mock_executor.execute.assert_called_once_with(["afplay", sound_file])
+        mock_executor.execute.assert_called_once_with(["afplay", "--volume", "100", sound_file])
 
     def test_show_notification(self, mock_executor):
         """测试显示通知"""
@@ -174,7 +175,7 @@ class TestMacOSAdapter:
         command = mock_executor.execute.call_args[0][0]
         assert "Subtitle" in " ".join(command)
 
-    @patch('vibe_notification.utils.check_command')
+    @patch('vibe_notification.adapters.check_command')
     def test_is_sound_available(self, mock_check_command):
         """测试检查声音功能可用性"""
         mock_check_command.return_value = True
@@ -183,7 +184,7 @@ class TestMacOSAdapter:
         assert adapter.is_sound_available() is True
         mock_check_command.assert_called_with("afplay")
 
-    @patch('vibe_notification.utils.check_command')
+    @patch('vibe_notification.adapters.check_command')
     def test_is_notification_available(self, mock_check_command):
         """测试检查通知功能可用性"""
         mock_check_command.return_value = True
@@ -196,8 +197,10 @@ class TestMacOSAdapter:
 class TestLinuxAdapter:
     """测试 Linux 适配器"""
 
-    def test_play_sound_default(self, mock_executor):
+    @patch('vibe_notification.adapters.check_command')
+    def test_play_sound_default(self, mock_check_command, mock_executor):
         """测试播放默认声音"""
+        mock_check_command.side_effect = lambda cmd: cmd == "paplay"
         adapter = LinuxAdapter(mock_executor)
 
         adapter.play_sound()
@@ -207,8 +210,10 @@ class TestLinuxAdapter:
         args = mock_executor.execute.call_args[0][0]
         assert args[0] in ["paplay", "aplay"]
 
-    def test_play_sound_file(self, mock_executor):
+    @patch('vibe_notification.adapters.check_command')
+    def test_play_sound_file(self, mock_check_command, mock_executor):
         """测试播放声音文件"""
+        mock_check_command.side_effect = lambda cmd: cmd == "paplay"
         adapter = LinuxAdapter(mock_executor)
         sound_file = "/path/to/sound.wav"
 
@@ -231,7 +236,7 @@ class TestLinuxAdapter:
         assert "Title" in args
         assert "Message" in args
 
-    @patch('vibe_notification.utils.check_command')
+    @patch('vibe_notification.adapters.check_command')
     def test_is_sound_available_paplay(self, mock_check_command):
         """测试检查声音功能可用性 - paplay"""
         mock_check_command.side_effect = lambda cmd: cmd == "paplay"
@@ -239,7 +244,7 @@ class TestLinuxAdapter:
 
         assert adapter.is_sound_available() is True
 
-    @patch('vibe_notification.utils.check_command')
+    @patch('vibe_notification.adapters.check_command')
     def test_is_sound_available_aplay(self, mock_check_command):
         """测试检查声音功能可用性 - aplay"""
         mock_check_command.side_effect = lambda cmd: cmd == "aplay"
@@ -247,7 +252,7 @@ class TestLinuxAdapter:
 
         assert adapter.is_sound_available() is True
 
-    @patch('vibe_notification.utils.check_command')
+    @patch('vibe_notification.adapters.check_command')
     def test_is_sound_available_none(self, mock_check_command):
         """测试检查声音功能可用性 - 无"""
         mock_check_command.return_value = False
@@ -277,8 +282,8 @@ class TestWindowsAdapter:
         with patch('pathlib.Path.exists', return_value=True):
             adapter.play_sound(sound_file=sound_file)
 
-        command = mock_executor.execute.call_args[0][1]
-        assert sound_file in command
+        command = mock_executor.execute.call_args[0][0]
+        assert sound_file in " ".join(command)
 
     def test_show_notification(self, mock_executor):
         """测试显示通知"""
@@ -292,7 +297,7 @@ class TestWindowsAdapter:
         assert "Title" in " ".join(command)
         assert "Message" in " ".join(command)
 
-    @patch('vibe_notification.utils.check_command')
+    @patch('vibe_notification.adapters.check_command')
     def test_is_sound_available(self, mock_check_command):
         """测试检查声音功能可用性"""
         mock_check_command.return_value = True
@@ -302,15 +307,12 @@ class TestWindowsAdapter:
         mock_check_command.assert_called_with("powershell.exe")
 
 
-@patch('vibe_notification.utils.get_platform_info')
-@patch('vibe_notification.adapters.DefaultCommandExecutor')
-def test_create_platform_adapter(mock_executor_class, mock_get_platform_info):
+@patch('vibe_notification.adapters.get_platform_info')
+def test_create_platform_adapter(mock_get_platform_info):
     """测试创建平台适配器"""
     mock_get_platform_info.return_value = {"system": "Darwin"}
     mock_executor = Mock()
-    mock_executor_class.return_value = mock_executor
 
-    adapter = create_platform_adapter()
+    adapter = create_platform_adapter(mock_executor)
 
     assert isinstance(adapter, MacOSAdapter)
-    mock_executor_class.assert_called_once()

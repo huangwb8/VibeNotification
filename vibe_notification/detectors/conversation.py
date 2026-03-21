@@ -19,6 +19,87 @@ TURN_COMPLETE_TYPES = {
 # 常见结束原因字段
 FINISH_REASONS = {"stop", "end", "complete", "completed", "done"}
 
+CODEX_NOTIFY_EVENT_TYPES = {
+    "agent-turn-complete",
+    "turn-completed",
+    "session-end",
+}
+
+CODEX_APP_SERVER_METHODS = {"turn/completed"}
+
+CODEX_HOOK_EVENT_NAMES = {"sessionstart", "userpromptsubmit", "stop"}
+
+
+def _normalize_event_name(value: Any) -> str:
+    """标准化事件名，统一比较格式。"""
+    if not isinstance(value, str):
+        return ""
+    return value.replace("_", "-").strip().lower()
+
+
+def _looks_like_codex_payload(event: Dict[str, Any]) -> bool:
+    """判断事件是否像 Codex CLI / hook / app-server 负载。"""
+    codex_keys = {
+        "thread-id", "thread_id",
+        "turn-id", "turn_id",
+        "input-messages", "input_messages",
+        "last-assistant-message", "last_assistant_message",
+        "hook_event_name", "session_id", "permission_mode",
+        "stop_hook_active", "client",
+    }
+
+    if any(key in event for key in codex_keys):
+        return True
+
+    event_type = _normalize_event_name(event.get("type") or event.get("event"))
+    if event_type in CODEX_NOTIFY_EVENT_TYPES:
+        return True
+
+    method = _normalize_event_name(event.get("method"))
+    if method in CODEX_APP_SERVER_METHODS:
+        return True
+
+    for key in ("agent", "client"):
+        value = event.get(key)
+        if isinstance(value, str) and "codex" in value.lower():
+            return True
+
+    return False
+
+
+def _detect_codex_conversation_end(event: Dict[str, Any]) -> bool:
+    """基于 Codex 官方事件形状判断是否为真实 turn 结束。"""
+    for key in ("is_last_turn", "conversation_end", "conversation_finished", "final", "closed"):
+        if key in event and bool(event.get(key)):
+            return True
+
+    hook_event_name = event.get("hook_event_name")
+    if isinstance(hook_event_name, str) and hook_event_name.strip().lower() in CODEX_HOOK_EVENT_NAMES:
+        return False
+
+    event_type = _normalize_event_name(event.get("type") or event.get("event"))
+    if event_type in CODEX_NOTIFY_EVENT_TYPES:
+        return True
+
+    method = _normalize_event_name(event.get("method"))
+    if method in CODEX_APP_SERVER_METHODS:
+        return True
+
+    for container_key in ("payload", "metadata", "data", "details"):
+        sub = event.get(container_key)
+        if not isinstance(sub, dict):
+            continue
+
+        nested_type = _normalize_event_name(sub.get("type") or sub.get("event"))
+        if nested_type in CODEX_NOTIFY_EVENT_TYPES:
+            return True
+
+        nested_method = _normalize_event_name(sub.get("method"))
+        if nested_method in CODEX_APP_SERVER_METHODS:
+            return True
+
+    return False
+
 
 def detect_conversation_end_from_hook(hook_data: Dict[str, Any]) -> bool:
     """从钩子数据检测会话结束"""
@@ -40,13 +121,16 @@ def detect_conversation_end(event: Dict[str, Any]) -> bool:
     if not isinstance(event, dict):
         return False
 
+    if _looks_like_codex_payload(event):
+        return _detect_codex_conversation_end(event)
+
     # 直接布尔标志
     for key in ("is_last_turn", "conversation_end", "conversation_finished", "final", "closed"):
         if key in event and bool(event.get(key)):
             return True
 
     # 事件类型语义：模型完成一轮输出
-    event_type = (event.get("type") or event.get("event") or "").replace("_", "-").lower()
+    event_type = _normalize_event_name(event.get("type") or event.get("event"))
     if event_type:
         if event_type in TURN_COMPLETE_TYPES or ("turn" in event_type and "complete" in event_type):
             return True
@@ -66,7 +150,7 @@ def detect_conversation_end(event: Dict[str, Any]) -> bool:
                 if key in sub and bool(sub.get(key)):
                     return True
             # 嵌套事件类型
-            nested_type = (sub.get("type") or sub.get("event") or "").replace("_", "-").lower()
+            nested_type = _normalize_event_name(sub.get("type") or sub.get("event"))
             if nested_type:
                 if nested_type in TURN_COMPLETE_TYPES or ("turn" in nested_type and "complete" in nested_type):
                     return True

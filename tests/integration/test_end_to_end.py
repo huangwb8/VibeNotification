@@ -52,14 +52,15 @@ class TestEndToEnd:
             tool_name="test-tool"
         )
 
-        with patch('vibe_notification.parsers.CodexParser') as MockParser:
+        with patch('vibe_notification.managers.CodexParser') as MockParser:
             # 配置模拟解析器
             parser_instance = MockParser.return_value
             parser_instance.can_parse.return_value = True
             parser_instance.parse.return_value = mock_event
 
             # 模拟平台适配器
-            with patch('vibe_notification.adapters.create_platform_adapter') as mock_adapter:
+            with patch('vibe_notification.core.AdapterFactory.create_default_executor', return_value=Mock()), \
+                 patch('vibe_notification.core.AdapterFactory.create_platform_adapter') as mock_adapter:
                 mock_adapter.return_value = Mock()
                 mock_adapter.return_value.is_sound_available.return_value = True
                 mock_adapter.return_value.is_notification_available.return_value = True
@@ -98,14 +99,15 @@ class TestEndToEnd:
 
     def test_error_handling_flow(self, mock_config):
         """测试错误处理流程"""
-        with patch('vibe_notification.parsers.CodexParser') as MockParser:
+        with patch('vibe_notification.managers.CodexParser') as MockParser:
             # 配置解析器抛出异常
             parser_instance = MockParser.return_value
             parser_instance.can_parse.return_value = True
             parser_instance.parse.side_effect = Exception("Parse error")
 
             # 模拟平台适配器
-            with patch('vibe_notification.adapters.create_platform_adapter') as mock_adapter:
+            with patch('vibe_notification.core.AdapterFactory.create_default_executor', return_value=Mock()), \
+                 patch('vibe_notification.core.AdapterFactory.create_platform_adapter') as mock_adapter:
                 mock_adapter.return_value = Mock()
                 mock_adapter.return_value.is_sound_available.return_value = True
                 mock_adapter.return_value.is_notification_available.return_value = True
@@ -119,15 +121,16 @@ class TestEndToEnd:
 
     def test_no_parser_available(self, mock_config):
         """测试没有可用解析器的情况"""
-        with patch('vibe_notification.parsers.CodexParser') as MockParser, \
-             patch('vibe_notification.parsers.ClaudeCodeParser') as MockClaudeParser:
+        with patch('vibe_notification.managers.CodexParser') as MockParser, \
+             patch('vibe_notification.managers.ClaudeCodeParser') as MockClaudeParser:
 
             # 配置所有解析器都不可用
             MockParser.return_value.can_parse.return_value = False
             MockClaudeParser.return_value.can_parse.return_value = False
 
             # 模拟平台适配器
-            with patch('vibe_notification.adapters.create_platform_adapter') as mock_adapter:
+            with patch('vibe_notification.core.AdapterFactory.create_default_executor', return_value=Mock()), \
+                 patch('vibe_notification.core.AdapterFactory.create_platform_adapter') as mock_adapter:
                 mock_adapter.return_value = Mock()
                 mock_adapter.return_value.is_sound_available.return_value = True
                 mock_adapter.return_value.is_notification_available.return_value = True
@@ -159,13 +162,14 @@ class TestEndToEnd:
             tool_name="test-tool"
         )
 
-        with patch('vibe_notification.parsers.CodexParser') as MockParser:
+        with patch('vibe_notification.managers.CodexParser') as MockParser:
             parser_instance = MockParser.return_value
             parser_instance.can_parse.return_value = True
             parser_instance.parse.return_value = mock_event
 
             # 模拟平台适配器
-            with patch('vibe_notification.adapters.create_platform_adapter') as mock_adapter:
+            with patch('vibe_notification.core.AdapterFactory.create_default_executor', return_value=Mock()), \
+                 patch('vibe_notification.core.AdapterFactory.create_platform_adapter') as mock_adapter:
                 adapter = Mock()
                 adapter.is_sound_available.return_value = False
                 adapter.is_notification_available.return_value = False
@@ -189,7 +193,7 @@ class TestEndToEnd:
         ]
 
         for platform_name, adapter_class in platforms:
-            with patch('vibe_notification.utils.get_platform_info') as mock_get_platform:
+            with patch('vibe_notification.adapters.get_platform_info') as mock_get_platform:
                 mock_get_platform.return_value = {"system": platform_name}
 
                 from vibe_notification.factories import AdapterFactory
@@ -200,7 +204,7 @@ class TestEndToEnd:
 
     def test_unsupported_platform(self):
         """测试不支持的平台"""
-        with patch('vibe_notification.utils.get_platform_info') as mock_get_platform:
+        with patch('vibe_notification.adapters.get_platform_info') as mock_get_platform:
             mock_get_platform.return_value = {"system": "UnknownOS"}
 
             from vibe_notification.factories import AdapterFactory

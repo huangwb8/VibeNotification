@@ -135,7 +135,7 @@ English | [中文](README.zh.md)
 
 ### Codex CLI
 
-Add a notifier command to `~/.codex/config.toml` so Codex triggers VibeNotification on every `agent-turn-complete`:
+Add a notifier command to `~/.codex/config.toml` so Codex triggers VibeNotification when the agent actually finishes a turn (`agent-turn-complete`):
 
 ```toml
 notify = ["python3", "-m", "vibe_notification"]
@@ -456,9 +456,9 @@ VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification
 Codex:
 
 ```bash
-python -m vibe_notification '{"type":"agent-turn-complete","agent":"codex","message":"tool Bash done"}'
-python -m vibe_notification '{"type":"agent-turn-complete","agent":"codex"}' --notification 1 --sound 0
-VIBE_NOTIFICATION_SOUND=1 VIBE_NOTIFICATION_NOTIFY=1 python -m vibe_notification '{"type":"agent-turn-complete"}'
+python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}'
+python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}' --notification 1 --sound 0
+VIBE_NOTIFICATION_SOUND=1 VIBE_NOTIFICATION_NOTIFY=1 python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}'
 ```
 
 ## Publishing to PyPI
