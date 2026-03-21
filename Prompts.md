@@ -1,5 +1,11 @@
 # 基本
 
+- 目前的版本
+
+```
+python -m vibe_notification --version
+```
+
 - 升级
 
 ```
