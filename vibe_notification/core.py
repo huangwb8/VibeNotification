@@ -98,6 +98,14 @@ class VibeNotifier:
         self.logger.info(f"处理事件: {event.agent} - {event.type} - 会话结束: {event.conversation_end}")
 
         try:
+            if self.config.detect_conversation_end and not event.conversation_end:
+                self.logger.info(
+                    "跳过非结束事件通知: %s - %s",
+                    event.agent,
+                    event.type,
+                )
+                return
+
             # 构建通知内容
             content = self.notification_builder.build_notification_content(event)
 

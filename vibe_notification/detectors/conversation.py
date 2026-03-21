@@ -11,14 +11,10 @@ TURN_COMPLETE_TYPES = {
     "agent-turn-complete",
     "turn-complete",
     "assistant-turn-complete",
-    "assistant-message",
     "assistant-message-complete",
     "assistant_turn_complete",
     "turn_complete",
 }
-
-# 定义常见的模型角色字段值
-ASSISTANT_ROLES = {"assistant", "model", "bot", "claude", "codex"}
 
 # 常见结束原因字段
 FINISH_REASONS = {"stop", "end", "complete", "completed", "done"}
@@ -83,13 +79,6 @@ def detect_conversation_end(event: Dict[str, Any]) -> bool:
     state = event.get("conversation_state") or event.get("state")
     if isinstance(state, str):
         if state.lower() in ("finished", "ended", "closed", "complete"):
-            return True
-
-    # 角色视角：模型端完成一轮输出
-    role = (event.get("role") or event.get("speaker") or event.get("who") or "").lower()
-    if role in ASSISTANT_ROLES and not bool(event.get("partial")):
-        # 有实质输出才认为一轮结束
-        if any(event.get(key) for key in ("text", "display", "message", "content")):
             return True
 
     # turn/total 启发式

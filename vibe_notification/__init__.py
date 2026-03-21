@@ -14,20 +14,34 @@ from pathlib import Path
 import re
 
 
+def _read_pyproject_version() -> str | None:
+    """Read version from pyproject.toml when running from the source tree."""
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    if not pyproject.is_file():
+        return None
+
+    match = re.search(
+        r'^version\s*=\s*"([^"]+)"',
+        pyproject.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    if match:
+        return match.group(1)
+    return None
+
+
 def _resolve_version() -> str:
     """Load version from installed metadata, fallback to pyproject.toml for editable mode."""
+    pyproject_version = _read_pyproject_version()
+    if pyproject_version:
+        return pyproject_version
+
     try:
         return metadata.version("vibe-notification")
     except metadata.PackageNotFoundError:
-        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
-        if pyproject.is_file():
-            match = re.search(
-                r'^version\s*=\s*"([^"]+)"',
-                pyproject.read_text(encoding="utf-8"),
-                re.MULTILINE,
-            )
-            if match:
-                return match.group(1)
+        pyproject_version = _read_pyproject_version()
+        if pyproject_version:
+            return pyproject_version
     return "0.0.0"
 
 

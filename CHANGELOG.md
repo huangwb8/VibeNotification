@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.5] - 2026-03-21
+
+### 修复
+- 修复 Codex 中间事件也会触发通知的过度报告问题
+- 默认仅在 `conversation_end=True` 时发送通知，非结束事件直接跳过
+- 收紧结束事件检测逻辑，不再将 `assistant-message` 直接视为一轮完成
+
+### 测试
+- 新增回归测试，覆盖“非结束事件不通知”和“`agent-turn-complete` 仍正常通知”
+
 ## [1.0.0] - 2025-12-20
 
 ### 新增
