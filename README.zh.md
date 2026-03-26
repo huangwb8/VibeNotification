@@ -135,11 +135,34 @@
 
 ### Codex CLI
 
-在 `~/.codex/config.toml` 中添加通知命令，让 Codex 仅在代理真实完成一轮回复时（`agent-turn-complete`）调用 VibeNotification：
+在 `~/.codex/config.toml` 中添加通知命令，让 Codex 在代理真实完成一轮回复时（`agent-turn-complete`）调用 VibeNotification：
 
 ```toml
 notify = ["python3", "-m", "vibe_notification"]
 ```
+
+注意：这里的 `notify` 是“每轮回复结束”触发，不是“整个 Codex 会话退出”触发。
+
+如果你只希望在整个 Codex 会话结束后再通知，请不要配置 `notify`，改为用一个 wrapper 启动 Codex。仓库已提供示例脚本 [examples/codex_session_end_wrapper.py](/Volumes/2T01/winE/Starup/VibeNotification/examples/codex_session_end_wrapper.py)：
+
+```bash
+python examples/codex_session_end_wrapper.py
+```
+
+如果你平时会带参数启动 Codex，也可以原样透传：
+
+```bash
+python examples/codex_session_end_wrapper.py --help
+python examples/codex_session_end_wrapper.py -C /path/to/project
+```
+
+想把它当成日常入口的话，可以在 shell 里加一个别名，例如：
+
+```bash
+alias codexn='python /Volumes/2T01/winE/Starup/VibeNotification/examples/codex_session_end_wrapper.py'
+```
+
+之后用 `codexn` 代替 `codex` 启动；这样只有当 Codex 进程真正退出时，VibeNotification 才会发送一次通知。
 
 典型配置位置：
 
@@ -232,7 +255,7 @@ python -m vibe_notification --notification 0 --test
 
 - `VIBE_NOTIFICATION_SOUND=0`：临时禁用声音
 - `VIBE_NOTIFICATION_NOTIFY=0`：临时禁用弹窗
-- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG`：启用调试日志
+- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG`：启用调试日志；Codex 原始 payload 会额外写入 `~/.config/vibe-notification/debug/codex-events.jsonl`
 
 Codex 示例：
 

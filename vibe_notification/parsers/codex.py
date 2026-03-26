@@ -5,8 +5,10 @@ Codex 解析器
 """
 
 import json
+import logging
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 from .base import BaseParser
 from ..models import NotificationEvent
@@ -15,6 +17,8 @@ from ..detectors.conversation import detect_conversation_end
 
 class CodexParser(BaseParser):
     """Codex 解析器"""
+
+    DEBUG_CAPTURE_PATH = Path.home() / ".config" / "vibe-notification" / "debug" / "codex-events.jsonl"
 
     CODEX_HOOK_EVENT_TYPES = {
         "sessionstart": "session-start",
@@ -50,6 +54,25 @@ class CodexParser(BaseParser):
         if not isinstance(value, str):
             return ""
         return value.strip().lower()
+
+    def _capture_debug_payload(self, event_data: Dict[str, Any]) -> None:
+        """在 DEBUG 模式下记录原始 Codex payload，便于排查 provider 差异。"""
+        if not self.logger.isEnabledFor(logging.DEBUG):
+            return
+
+        try:
+            compact_payload = json.dumps(event_data, ensure_ascii=False, sort_keys=True)
+            self.logger.debug("Codex raw payload: %s", compact_payload)
+
+            self.DEBUG_CAPTURE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            record = {
+                "captured_at": datetime.now().isoformat(),
+                "payload": event_data,
+            }
+            with self.DEBUG_CAPTURE_PATH.open("a", encoding="utf-8") as fp:
+                fp.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception as exc:
+            self.logger.debug("写入 Codex DEBUG payload 失败: %s", exc)
 
     def _infer_event_type(self, event_data: Dict[str, Any]) -> str:
         """推断事件类型。"""
@@ -119,11 +142,24 @@ class CodexParser(BaseParser):
             if event_data is None:
                 return None
 
+            self._capture_debug_payload(event_data)
             conversation_end = detect_conversation_end(event_data)
             agent = self._infer_agent(event_data)
             event_type = self._infer_event_type(event_data)
             message = self._infer_message(event_data, conversation_end)
             summary = message if conversation_end else f"{message}（忽略通知）"
+
+            if not conversation_end and event_type in {"agent-turn-complete", "turn-completed"}:
+                self.logger.debug(
+                    "Suppressing Codex terminal notification for suspicious payload: type=%s, message=%r",
+                    event_type,
+                    self._get_value(
+                        event_data,
+                        "last_assistant_message",
+                        "last-assistant-message",
+                        "message",
+                    ),
+                )
 
             event = NotificationEvent(
                 type=event_type,

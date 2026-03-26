@@ -9,7 +9,7 @@ python -m vibe_notification --version
 - 升级
 
 ```
-version=1.0.6
+version=1.0.7
 pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 git-commit skill创建commit信息；通过git-publish-release skill 发布release。然后，在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装这个版本。
 ```
 
@@ -22,6 +22,10 @@ pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 
 ```
 
 # 日常
+
+---
+
+目前，codex切实接收了用户的指令后vibenotification也会发送通知，这是我不想要的。 我只希望会话结束了才发送通知。 要怎么做？
 
 ---
 

@@ -141,6 +141,29 @@ Add a notifier command to `~/.codex/config.toml` so Codex triggers VibeNotificat
 notify = ["python3", "-m", "vibe_notification"]
 ```
 
+Note: `notify` is turn-based, not session-exit-based.
+
+If you only want one notification after the whole Codex session exits, do not configure `notify`. Instead, start Codex through the wrapper example at [examples/codex_session_end_wrapper.py](/Volumes/2T01/winE/Starup/VibeNotification/examples/codex_session_end_wrapper.py):
+
+```bash
+python examples/codex_session_end_wrapper.py
+```
+
+You can pass normal Codex arguments through unchanged:
+
+```bash
+python examples/codex_session_end_wrapper.py --help
+python examples/codex_session_end_wrapper.py -C /path/to/project
+```
+
+If you want this as your everyday entrypoint, add a shell alias such as:
+
+```bash
+alias codexn='python /Volumes/2T01/winE/Starup/VibeNotification/examples/codex_session_end_wrapper.py'
+```
+
+Then launch `codexn` instead of `codex`; VibeNotification will fire only once, after the Codex process actually exits.
+
 Typical placement in `config.toml`:
 
 ```toml
@@ -232,7 +255,7 @@ python -m vibe_notification --notification 0 --test
 
 - `VIBE_NOTIFICATION_SOUND=0` — mute sound
 - `VIBE_NOTIFICATION_NOTIFY=0` — disable system notification
-- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` — enable debug logging
+- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` — enable debug logging; raw Codex payloads are also appended to `~/.config/vibe-notification/debug/codex-events.jsonl`
 
 Codex examples:
 

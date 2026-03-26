@@ -175,6 +175,7 @@ test_output/
 # Cache
 tests/
 tests/upload_prompts.md
+tmp/
 
 # Python build outputs
 .pybuild/
