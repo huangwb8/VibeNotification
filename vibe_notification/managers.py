@@ -30,8 +30,8 @@ class ParserManager:
     def _initialize_parsers(self):
         """初始化所有解析器"""
         self.parsers = [
-            CodexParser(),
             ClaudeCodeParser(),
+            CodexParser(),
         ]
         self.logger.info(f"Initialized {len(self.parsers)} parsers")
 

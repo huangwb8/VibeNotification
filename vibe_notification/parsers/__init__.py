@@ -7,5 +7,6 @@
 from .base import BaseParser
 from .claude_code import ClaudeCodeParser
 from .codex import CodexParser
+from ._stdin import get_stdin_json
 
-__all__ = ["BaseParser", "ClaudeCodeParser", "CodexParser"]
+__all__ = ["BaseParser", "ClaudeCodeParser", "CodexParser", "get_stdin_json"]

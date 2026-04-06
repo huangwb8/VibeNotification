@@ -1,70 +1,77 @@
 """
 Claude Code 解析器
 
-解析 Claude Code 钩子事件
+解析 Claude Code 钩子事件。
+支持两种来源：
+1. 环境变量 CLAUDE_HOOK_EVENT（旧版 / 部分场景）
+2. stdin JSON 中的 hook_event_name 字段（Claude Code 官方 Stop 钩子）
 """
 
-import json
 import os
 import sys
-import select
 from datetime import datetime
 from typing import Any, Dict, Optional
+
 from .base import BaseParser
+from ._stdin import get_stdin_json
 from ..models import NotificationEvent
-from ..detectors.conversation import detect_conversation_end_from_hook
 
 
 class ClaudeCodeParser(BaseParser):
     """Claude Code 解析器"""
 
-    def _stdin_has_data(self) -> bool:
-        """检查 stdin 是否有可读数据"""
-        try:
-            readable, _, _ = select.select([sys.stdin], [], [], 0)
-            return bool(readable)
-        except Exception:
-            return False
+    # Claude Code 钩子事件名（与 Claude Code 发送的大小写一致）
+    HOOK_EVENTS = {"Stop", "SessionEnd", "SubagentStop", "PostToolUse", "PreToolUse", "ToolError"}
+
+    def _get_hook_event(self) -> Optional[str]:
+        """从环境变量或 stdin JSON 获取钩子事件名。"""
+        # 优先检查环境变量
+        env_event = os.environ.get("CLAUDE_HOOK_EVENT")
+        if env_event:
+            return env_event
+
+        # 从 stdin JSON 检查 hook_event_name
+        stdin_json = get_stdin_json()
+        if isinstance(stdin_json, dict):
+            name = stdin_json.get("hook_event_name")
+            if name and name in self.HOOK_EVENTS:
+                return name
+
+        return None
 
     def can_parse(self) -> bool:
-        """检查是否在 Claude Code 钩子上下文中"""
-        # 检查钩子事件环境变量
-        hook_event = os.environ.get("CLAUDE_HOOK_EVENT")
-        if hook_event in (
-            "SessionEnd", "Stop", "SubagentStop",
-            "PostToolUse", "PreToolUse", "ToolError"
-        ):
+        """检查是否在 Claude Code 钩子上下文中。"""
+        # 1. 通过环境变量或 stdin hook_event_name 匹配
+        if self._get_hook_event():
             return True
 
-        # 检查 stdin 是否有数据（用于某些钩子事件的额外数据）
-        if not sys.stdin.isatty() and self._stdin_has_data():
+        # 2. stdin 有 JSON 数据（用于 stdin 直接传入工具数据的场景）
+        if get_stdin_json():
             return True
 
-        # 检查其他环境变量
+        # 3. 其他 Claude Code 相关环境变量
         if os.environ.get("CLAUDE_HOOK_COMMAND") or os.environ.get("CLAUDE_HOOK_TOOL_NAME"):
             return True
 
         return False
 
     def _parse_hook_event(self) -> Optional[NotificationEvent]:
-        """解析基于环境变量的钩子事件"""
-        hook_event = os.environ.get("CLAUDE_HOOK_EVENT")
+        """解析钩子事件（环境变量 + stdin JSON 统一入口）。"""
+        hook_event = self._get_hook_event()
+        stdin_json = get_stdin_json()
 
-        # Stop 事件 - Claude 完成一次完整回复
         if hook_event == "Stop":
-            # Stop 事件通常表示一次完整的回复结束，应该触发通知
             return NotificationEvent(
                 type="agent-turn-complete",
                 agent="claude-code",
                 message="Claude 回复完成",
                 summary="Claude Code 已完成回复",
                 timestamp=datetime.now().isoformat(),
-                conversation_end=True,  # Stop 事件表示回复完成，应该触发会话结束通知
+                conversation_end=True,
                 is_last_turn=True,
-                metadata={"event": "Stop", "source": "hook"}
+                metadata={"event": "Stop", "source": "hook", "stdin": stdin_json or {}}
             )
 
-        # SubagentStop 事件 - 子代理完成任务
         if hook_event == "SubagentStop":
             return NotificationEvent(
                 type="agent-turn-complete",
@@ -72,12 +79,11 @@ class ClaudeCodeParser(BaseParser):
                 message="子代理完成任务",
                 summary="Claude Code 子代理已完成",
                 timestamp=datetime.now().isoformat(),
-                conversation_end=True,  # 子代理完成也表示一次任务完成
+                conversation_end=True,
                 is_last_turn=True,
-                metadata={"event": "SubagentStop", "source": "hook"}
+                metadata={"event": "SubagentStop", "source": "hook", "stdin": stdin_json or {}}
             )
 
-        # SessionEnd 事件 - 会话结束
         if hook_event == "SessionEnd":
             return NotificationEvent(
                 type="session-end",
@@ -87,12 +93,10 @@ class ClaudeCodeParser(BaseParser):
                 timestamp=datetime.now().isoformat(),
                 conversation_end=True,
                 is_last_turn=True,
-                metadata={"event": "SessionEnd", "source": "hook"}
+                metadata={"event": "SessionEnd", "source": "hook", "stdin": stdin_json or {}}
             )
 
-        # PostToolUse 事件 - 工具调用完成后
         if hook_event == "PostToolUse":
-            # 尝试从环境变量获取工具信息
             tool_name = os.environ.get("CLAUDE_HOOK_TOOL_NAME", "unknown")
             return NotificationEvent(
                 type="tool-complete",
@@ -106,13 +110,10 @@ class ClaudeCodeParser(BaseParser):
                 metadata={"event": "PostToolUse", "source": "hook", "tool_name": tool_name}
             )
 
-        # PreToolUse 事件 - 工具调用前（通常不需要通知）
         if hook_event == "PreToolUse":
-            # 工具开始时不发送通知，避免干扰
-            self.logger.debug(f"工具调用开始，跳过通知: {os.environ.get('CLAUDE_HOOK_TOOL_NAME', 'unknown')}")
+            self.logger.debug("工具调用开始，跳过通知: %s", os.environ.get("CLAUDE_HOOK_TOOL_NAME", "unknown"))
             return None
 
-        # ToolError 事件 - 工具调用出错
         if hook_event == "ToolError":
             tool_name = os.environ.get("CLAUDE_HOOK_TOOL_NAME", "unknown")
             return NotificationEvent(
@@ -130,62 +131,55 @@ class ClaudeCodeParser(BaseParser):
         return None
 
     def _parse_stdin_data(self) -> Optional[NotificationEvent]:
-        """解析 stdin 数据（用于某些钩子的额外信息）"""
-        try:
-            if not sys.stdin.isatty() and self._stdin_has_data():
-                hook_input = sys.stdin.read()
-                if hook_input:
-                    hook_data = json.loads(hook_input)
+        """解析 stdin JSON 数据（非 hook_event_name 场景的回退）。"""
+        from ..detectors.conversation import detect_conversation_end_from_hook
 
-                    tool_name = hook_data.get("toolName") or hook_data.get("tool_name")
-                    conversation_end = detect_conversation_end_from_hook(hook_data)
+        stdin_json = get_stdin_json()
+        if not isinstance(stdin_json, dict):
+            return None
 
-                    # 根据数据类型处理
-                    if tool_name:
-                        message = f"使用工具: {tool_name}"
-                        summary = f"Claude Code 完成了 {tool_name} 操作"
-                        event_type = "tool-complete"
-                    else:
-                        message = hook_data.get("message") or "Claude Code 操作完成"
-                        summary = hook_data.get("summary") or message
-                        event_type = "agent-turn-complete" if conversation_end else "operation-complete"
+        # 如果已经有 hook_event_name 匹配，跳过（已在 _parse_hook_event 处理）
+        if stdin_json.get("hook_event_name") in self.HOOK_EVENTS:
+            return None
 
-                    return NotificationEvent(
-                        type=event_type,
-                        agent="claude-code",
-                        message=message,
-                        summary=summary,
-                        timestamp=datetime.now().isoformat(),
-                        tool_name=tool_name,
-                        conversation_end=conversation_end,
-                        is_last_turn=conversation_end,
-                        metadata={"source": "stdin", "data": hook_data}
-                    )
+        tool_name = stdin_json.get("toolName") or stdin_json.get("tool_name")
+        conversation_end = detect_conversation_end_from_hook(stdin_json)
 
-        except json.JSONDecodeError as e:
-            self.logger.error(f"解析 stdin JSON 数据失败: {e}")
-        except Exception as e:
-            self.logger.error(f"处理 stdin 数据时出错: {e}")
+        if tool_name:
+            message = f"使用工具: {tool_name}"
+            summary = f"Claude Code 完成了 {tool_name} 操作"
+            event_type = "tool-complete"
+        else:
+            message = stdin_json.get("message") or "Claude Code 操作完成"
+            summary = stdin_json.get("summary") or message
+            event_type = "agent-turn-complete" if conversation_end else "operation-complete"
 
-        return None
+        return NotificationEvent(
+            type=event_type,
+            agent="claude-code",
+            message=message,
+            summary=summary,
+            timestamp=datetime.now().isoformat(),
+            tool_name=tool_name,
+            conversation_end=conversation_end,
+            is_last_turn=conversation_end,
+            metadata={"source": "stdin", "data": stdin_json}
+        )
 
     def parse(self) -> Optional[NotificationEvent]:
-        """解析 Claude Code 钩子事件"""
-        # 首先处理基于环境变量的钩子事件
+        """解析 Claude Code 钩子事件。"""
+        # 首先处理钩子事件（环境变量或 stdin hook_event_name）
         event = self._parse_hook_event()
         if event is not None:
             return event
 
-        # 如果没有钩子事件，尝试解析 stdin 数据
+        # 回退到 stdin 数据解析
         event = self._parse_stdin_data()
         if event is not None:
             return event
 
-        # 如果都没有，检查是否是其他类型的钩子上下文
-        if (os.environ.get("CLAUDE_HOOK_COMMAND") or
-            os.environ.get("CLAUDE_HOOK_TOOL_NAME")):
-            # 有钩子上下文但没有具体事件类型，创建回退事件
+        # 有钩子上下文但没有具体事件类型，创建回退事件
+        if os.environ.get("CLAUDE_HOOK_COMMAND") or os.environ.get("CLAUDE_HOOK_TOOL_NAME"):
             return self.create_fallback_event("claude-code", "Claude Code 操作完成")
 
-        # 完全没有相关上下文
         return None

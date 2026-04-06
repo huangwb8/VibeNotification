@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 from .base import BaseParser
+from ._stdin import get_stdin_json
 from ..models import NotificationEvent
 from ..detectors.conversation import detect_conversation_end
 
@@ -33,7 +34,7 @@ class CodexParser(BaseParser):
 
         支持两种来源：
         1. Codex notify: JSON 作为最后一个 argv 参数传入
-        2. Codex hooks.json: 数据通过 stdin 传入
+        2. Codex hooks.json / stdin: 数据通过 stdin 传入（共享缓存，仅读一次）
         """
         # 优先尝试 argv（notify 机制）
         if len(sys.argv) >= 2:
@@ -44,16 +45,10 @@ class CodexParser(BaseParser):
             except Exception:
                 pass
 
-        # 回退到 stdin（hooks.json 机制）
-        try:
-            if not sys.stdin.isatty():
-                stdin_data = sys.stdin.read().strip()
-                if stdin_data:
-                    event_data = json.loads(stdin_data)
-                    if isinstance(event_data, dict):
-                        return event_data
-        except Exception:
-            pass
+        # 使用共享 stdin 缓存（避免重复读取导致数据丢失）
+        stdin_json = get_stdin_json()
+        if isinstance(stdin_json, dict):
+            return stdin_json
 
         return None
 
@@ -213,8 +208,18 @@ class CodexParser(BaseParser):
 
     def can_parse(self) -> bool:
         """检查是否可以解析 Codex 事件"""
-        # Codex notify / hooks 都会将 JSON 作为最后一个参数传入
-        return self._load_event_data() is not None
+        event_data = self._load_event_data()
+        if event_data is None:
+            return False
+
+        # 拒绝 Claude Code 钩子事件（由 ClaudeCodeParser 处理）
+        hook_event_name = event_data.get("hook_event_name", "")
+        if hook_event_name in {"Stop", "SessionEnd", "SubagentStop"}:
+            claude_markers = {"stop_hook_active", "transcript_path", "permission_mode"}
+            if claude_markers & event_data.keys():
+                return False
+
+        return True
 
     def parse(self) -> Optional[NotificationEvent]:
         """解析 Codex 事件"""

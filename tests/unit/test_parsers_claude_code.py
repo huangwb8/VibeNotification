@@ -2,6 +2,7 @@ import io
 import json
 import sys
 from vibe_notification.parsers import ClaudeCodeParser
+from vibe_notification.parsers._stdin import get_stdin_json
 
 
 def test_session_end_event_triggers_notification(monkeypatch):
@@ -23,11 +24,17 @@ def test_stdin_without_tool_name_still_detects_end(monkeypatch):
     """没有 toolName 的 stdin 事件也应检测会话结束"""
     data = {"finish_reason": "stop", "message": "done"}
     monkeypatch.delenv("CLAUDE_HOOK_EVENT", raising=False)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(data)))
+
+    # 重置 stdin 缓存以使用新的 mock stdin
+    import vibe_notification.parsers._stdin as _stdin_mod
+    monkeypatch.setattr(_stdin_mod, "_cache", _stdin_mod._UNREAD)
+
     parser = ClaudeCodeParser()
 
-    # 模拟 stdin 数据并跳过 select.select
-    monkeypatch.setattr(parser, "_stdin_has_data", lambda: True)
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(data)))
+    # 通过共享缓存读取 stdin
+    stdin_json = get_stdin_json()
+    assert stdin_json == data
 
     event = parser.parse()
 
