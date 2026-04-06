@@ -29,6 +29,35 @@ CODEX_APP_SERVER_METHODS = {"turn/completed"}
 
 CODEX_HOOK_EVENT_NAMES = {"sessionstart", "userpromptsubmit", "stop"}
 
+CODEX_TERMINAL_PHASES = {"final-answer", "final_answer"}
+
+CODEX_NON_TERMINAL_PHASES = {"commentary"}
+
+CODEX_TERMINAL_STATUSES = {
+    "completed",
+    "complete",
+    "finished",
+    "done",
+    "cancelled",
+    "canceled",
+    "interrupted",
+    "failed",
+    "error",
+    "errored",
+}
+
+CODEX_NON_TERMINAL_STATUSES = {
+    "created",
+    "pending",
+    "queued",
+    "started",
+    "running",
+    "streaming",
+    "in-progress",
+    "in_progress",
+    "continuing",
+}
+
 CODEX_PROGRESS_MESSAGE_PREFIXES = (
     "working on it",
     "let me",
@@ -66,6 +95,17 @@ def _normalize_event_name(value: Any) -> str:
     return value.replace("_", "-").strip().lower()
 
 
+def _iter_nested_dicts(value: Any):
+    """递归遍历嵌套字典，兼容 app-server 新负载。"""
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _iter_nested_dicts(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_nested_dicts(child)
+
+
 def _looks_like_codex_payload(event: Dict[str, Any]) -> bool:
     """判断事件是否像 Codex CLI / hook / app-server 负载。"""
     codex_keys = {
@@ -98,12 +138,30 @@ def _looks_like_codex_payload(event: Dict[str, Any]) -> bool:
 
 def _extract_codex_assistant_message(event: Dict[str, Any]) -> str:
     """提取 Codex 负载中的 assistant 文本。"""
-    for key in ("last-assistant-message", "last_assistant_message", "message"):
-        value = event.get(key)
-        if isinstance(value, str):
-            text = value.strip()
-            if text:
-                return text
+    for payload in _iter_nested_dicts(event):
+        for key in ("last-assistant-message", "last_assistant_message"):
+            value = payload.get(key)
+            if isinstance(value, str):
+                text = value.strip()
+                if text:
+                    return text
+
+    for payload in _iter_nested_dicts(event):
+        for key in ("agentMessage", "agent_message"):
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                value = nested.get("text")
+                if isinstance(value, str):
+                    text = value.strip()
+                    if text:
+                        return text
+
+    value = event.get("message")
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return text
+
     return ""
 
 
@@ -128,25 +186,91 @@ def _codex_turn_complete_has_terminal_content(event: Dict[str, Any]) -> bool:
     return not _looks_like_codex_progress_message(assistant_message)
 
 
+def _contains_codex_hook_event(event: Dict[str, Any]) -> bool:
+    """检查负载任意层是否携带 Codex hook 事件。"""
+    for payload in _iter_nested_dicts(event):
+        hook_event_name = payload.get("hook_event_name") or payload.get("hookEventName")
+        if _normalize_event_name(hook_event_name) in CODEX_HOOK_EVENT_NAMES:
+            return True
+    return False
+
+
+def _collect_codex_phases(event: Dict[str, Any]) -> set[str]:
+    """收集 Codex 响应 phase。"""
+    phases = set()
+    for payload in _iter_nested_dicts(event):
+        phase = payload.get("phase")
+        normalized = _normalize_event_name(phase)
+        if normalized:
+            phases.add(normalized)
+    return phases
+
+
+def _collect_codex_statuses(event: Dict[str, Any]) -> set[str]:
+    """收集 Codex turn/session status。"""
+    statuses = set()
+    for payload in _iter_nested_dicts(event):
+        for key in ("status", "turn_status", "turnStatus", "state"):
+            normalized = _normalize_event_name(payload.get(key))
+            if normalized:
+                statuses.add(normalized)
+
+        for container_key in ("turn", "thread", "session", "conversation"):
+            sub = payload.get(container_key)
+            if not isinstance(sub, dict):
+                continue
+            for key in ("status", "turn_status", "turnStatus", "state"):
+                normalized = _normalize_event_name(sub.get(key))
+                if normalized:
+                    statuses.add(normalized)
+    return statuses
+
+
+def _codex_structured_terminal_signal(event: Dict[str, Any]) -> bool | None:
+    """读取结构化 phase/status 信号，True=终态，False=中间态，None=无结论。"""
+    phases = _collect_codex_phases(event)
+    statuses = _collect_codex_statuses(event)
+
+    if any(status in CODEX_NON_TERMINAL_STATUSES for status in statuses):
+        return False
+
+    if any(status in CODEX_TERMINAL_STATUSES for status in statuses):
+        return True
+
+    if any(phase in CODEX_TERMINAL_PHASES for phase in phases):
+        return True
+
+    if any(phase in CODEX_NON_TERMINAL_PHASES for phase in phases):
+        return False
+
+    return None
+
+
 def _detect_codex_conversation_end(event: Dict[str, Any]) -> bool:
     """基于 Codex 官方事件形状判断是否为真实 turn 结束。"""
-    hook_event_name = event.get("hook_event_name")
-    if isinstance(hook_event_name, str) and hook_event_name.strip().lower() in CODEX_HOOK_EVENT_NAMES:
+    if _contains_codex_hook_event(event):
         return False
 
     event_type = _normalize_event_name(event.get("type") or event.get("event"))
+    method = _normalize_event_name(event.get("method"))
+    structured_signal = _codex_structured_terminal_signal(event)
+
     if event_type == "session-end":
         return True
 
     for key in ("is_last_turn", "conversation_end", "conversation_finished", "final", "closed"):
         if key in event and bool(event.get(key)):
-            return _codex_turn_complete_has_terminal_content(event) or event_type == "session-end"
+            if structured_signal is False:
+                return False
+            if structured_signal is True:
+                return True
+            return _codex_turn_complete_has_terminal_content(event)
 
-    if event_type in CODEX_NOTIFY_EVENT_TYPES:
-        return _codex_turn_complete_has_terminal_content(event)
-
-    method = _normalize_event_name(event.get("method"))
-    if method in CODEX_APP_SERVER_METHODS:
+    if event_type in CODEX_NOTIFY_EVENT_TYPES or method in CODEX_APP_SERVER_METHODS:
+        if structured_signal is False:
+            return False
+        if structured_signal is True:
+            return True
         return _codex_turn_complete_has_terminal_content(event)
 
     for container_key in ("payload", "metadata", "data", "details"):
@@ -156,6 +280,11 @@ def _detect_codex_conversation_end(event: Dict[str, Any]) -> bool:
 
         for key in ("conversation_end", "conversation_finished", "is_last_turn", "final", "closed"):
             if key in sub and bool(sub.get(key)):
+                nested_signal = _codex_structured_terminal_signal(sub)
+                if nested_signal is False:
+                    return False
+                if nested_signal is True:
+                    return True
                 return _codex_turn_complete_has_terminal_content(sub)
 
         nested_type = _normalize_event_name(sub.get("type") or sub.get("event"))
@@ -163,10 +292,20 @@ def _detect_codex_conversation_end(event: Dict[str, Any]) -> bool:
             return True
 
         if nested_type in CODEX_NOTIFY_EVENT_TYPES:
+            nested_signal = _codex_structured_terminal_signal(sub)
+            if nested_signal is False:
+                return False
+            if nested_signal is True:
+                return True
             return _codex_turn_complete_has_terminal_content(sub)
 
         nested_method = _normalize_event_name(sub.get("method"))
         if nested_method in CODEX_APP_SERVER_METHODS:
+            nested_signal = _codex_structured_terminal_signal(sub)
+            if nested_signal is False:
+                return False
+            if nested_signal is True:
+                return True
             return _codex_turn_complete_has_terminal_content(sub)
 
     return False

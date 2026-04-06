@@ -9,7 +9,7 @@ python -m vibe_notification --version
 - 升级
 
 ```
-version=1.0.7
+version=1.0.8
 pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 git-commit skill创建commit信息；通过git-publish-release skill 发布release。然后，在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装这个版本。
 ```
 
@@ -22,6 +22,16 @@ pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 
 ```
 
 # 日常
+
+---
+
+最近codex更新后，又再次出现之前的bug——切实接收了用户的指令后vibenotification也会发送通知，而不是等会话结束了才发送通知。请：
+
+- 联网了解codex的通知方式是不是有所更新
+- 对因处理——优化vibenotification以适应最新的codex特性
+- 我希望：会话结束了才发送通知
+
+使用 awesome-code skill 辅助规划、优化。所有问题都要解决。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。不要破坏其它功能。要保证最终成品能正常、稳定、高效地工作。 
 
 ---
 

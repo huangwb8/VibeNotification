@@ -50,10 +50,67 @@ class CodexParser(BaseParser):
 
     def _normalize_hook_event_name(self, event_data: Dict[str, Any]) -> str:
         """标准化 hook 事件名。"""
-        value = self._get_value(event_data, "hook_event_name")
+        value = self._get_value(event_data, "hook_event_name", "hookEventName")
         if not isinstance(value, str):
             return ""
         return value.strip().lower()
+
+    def _iter_nested_dicts(self, value: Any):
+        """递归遍历嵌套字典，兼容新版 app-server 负载。"""
+        if isinstance(value, dict):
+            yield value
+            for child in value.values():
+                yield from self._iter_nested_dicts(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from self._iter_nested_dicts(child)
+
+    def _normalize_phase(self, value: Any) -> str:
+        """标准化 phase 字段。"""
+        if not isinstance(value, str):
+            return ""
+        return value.replace("_", "-").strip().lower()
+
+    def _extract_structured_message(self, event_data: Dict[str, Any]) -> str:
+        """从新版 Codex 结构化事件中提取更可靠的最终消息。"""
+        final_messages = []
+        commentary_messages = []
+        plan_messages = []
+
+        for payload in self._iter_nested_dicts(event_data):
+            for key in ("agentMessage", "agent_message"):
+                nested = payload.get(key)
+                if not isinstance(nested, dict):
+                    continue
+                value = nested.get("text")
+                if not isinstance(value, str) or not value.strip():
+                    continue
+
+                text = value.strip()
+                phase = self._normalize_phase(nested.get("phase"))
+                if phase == "final-answer":
+                    final_messages.append(text)
+                else:
+                    commentary_messages.append(text)
+
+        for payload in self._iter_nested_dicts(event_data):
+            nested = payload.get("plan")
+            if not isinstance(nested, dict):
+                continue
+            value = nested.get("text")
+            if isinstance(value, str) and value.strip():
+                plan_messages.append(value.strip())
+
+        if final_messages:
+            return final_messages[0]
+
+        if plan_messages:
+            return plan_messages[0]
+
+        if commentary_messages:
+            return commentary_messages[0]
+
+        return ""
 
     def _capture_debug_payload(self, event_data: Dict[str, Any]) -> None:
         """在 DEBUG 模式下记录原始 Codex payload，便于排查 provider 差异。"""
@@ -116,6 +173,10 @@ class CodexParser(BaseParser):
         )
         if isinstance(assistant_message, str) and assistant_message.strip():
             return assistant_message
+
+        structured_message = self._extract_structured_message(event_data)
+        if structured_message:
+            return structured_message
 
         hook_event_name = self._normalize_hook_event_name(event_data)
         if hook_event_name == "userpromptsubmit":
