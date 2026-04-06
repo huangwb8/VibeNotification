@@ -23,23 +23,39 @@ class CodexParser(BaseParser):
     CODEX_HOOK_EVENT_TYPES = {
         "sessionstart": "session-start",
         "userpromptsubmit": "user-prompt-submit",
+        "pretooluse": "pre-tool-use",
+        "posttooluse": "post-tool-use",
         "stop": "stop-hook",
     }
 
     def _load_event_data(self) -> Optional[Dict[str, Any]]:
-        """读取并校验最后一个 argv JSON。"""
-        if len(sys.argv) < 2:
-            return None
+        """读取并校验事件数据。
 
+        支持两种来源：
+        1. Codex notify: JSON 作为最后一个 argv 参数传入
+        2. Codex hooks.json: 数据通过 stdin 传入
+        """
+        # 优先尝试 argv（notify 机制）
+        if len(sys.argv) >= 2:
+            try:
+                event_data = json.loads(sys.argv[-1])
+                if isinstance(event_data, dict):
+                    return event_data
+            except Exception:
+                pass
+
+        # 回退到 stdin（hooks.json 机制）
         try:
-            event_data = json.loads(sys.argv[-1])
+            if not sys.stdin.isatty():
+                stdin_data = sys.stdin.read().strip()
+                if stdin_data:
+                    event_data = json.loads(stdin_data)
+                    if isinstance(event_data, dict):
+                        return event_data
         except Exception:
-            return None
+            pass
 
-        if not isinstance(event_data, dict):
-            return None
-
-        return event_data
+        return None
 
     def _get_value(self, event_data: Dict[str, Any], *keys: str) -> Any:
         """兼容 kebab-case / snake_case 的字段读取。"""
@@ -183,6 +199,10 @@ class CodexParser(BaseParser):
             return "Codex 已接收用户指令"
         if hook_event_name == "sessionstart":
             return "Codex 会话已启动"
+        if hook_event_name == "pretooluse":
+            return "Codex 工具调用前"
+        if hook_event_name == "posttooluse":
+            return "Codex 工具调用完成"
         if hook_event_name == "stop":
             return "Codex Stop hook 已触发"
 

@@ -7,13 +7,14 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 from .models import NotificationConfig, NotificationEvent
 from .config import get_env_config
 from .managers import ParserManager, NotifierManager, NotificationBuilder
 from .factories import AdapterFactory
 from .exceptions import VibeNotificationError
 from .i18n import set_language, t
+from .debounce import handle_codex_turn_event
 
 
 class VibeNotifier:
@@ -60,7 +61,11 @@ class VibeNotifier:
         try:
             # 获取解析器并解析事件
             parser = self.parser_manager.get_available_parser()
+            raw_event_data = None
             if parser:
+                # 对 Codex 解析器，保留原始数据用于防抖
+                if hasattr(parser, '_load_event_data'):
+                    raw_event_data = parser._load_event_data()
                 event = parser.parse()
             else:
                 self.logger.warning("未知运行模式，使用测试事件")
@@ -76,6 +81,15 @@ class VibeNotifier:
 
             if event is None:
                 self.logger.info("解析结果为空，跳过通知发送")
+                return
+
+            # Codex turn-complete 防抖：交给 debounce 模块处理
+            if raw_event_data is not None and handle_codex_turn_event(raw_event_data, event):
+                self.logger.info(
+                    "Codex turn 事件已进入防抖队列: %s - %s",
+                    event.agent,
+                    event.type,
+                )
                 return
 
             # 处理事件

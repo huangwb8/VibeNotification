@@ -27,7 +27,7 @@ CODEX_NOTIFY_EVENT_TYPES = {
 
 CODEX_APP_SERVER_METHODS = {"turn/completed"}
 
-CODEX_HOOK_EVENT_NAMES = {"sessionstart", "userpromptsubmit", "stop"}
+CODEX_HOOK_EVENT_NAMES = {"sessionstart", "userpromptsubmit", "pretooluse", "posttooluse", "stop"}
 
 CODEX_TERMINAL_PHASES = {"final-answer", "final_answer"}
 
