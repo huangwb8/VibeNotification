@@ -13,6 +13,7 @@ from vibe_notification.adapters import (
     create_platform_adapter,
     UnsupportedPlatformError
 )
+from vibe_notification.exceptions import CommandExecutionError
 from tests.conftest import command_result_success, command_result_failure
 
 
@@ -130,8 +131,8 @@ class TestMacOSAdapter:
         adapter.play_sound(sound_type="default")
 
         # 验证调用参数
-        mock_executor.execute.assert_called_once()
-        args = mock_executor.execute.call_args[0][0]
+        mock_executor.execute_with_timeout.assert_called_once()
+        args = mock_executor.execute_with_timeout.call_args[0][0]
         assert "afplay" in args
         assert any("Ping" in arg for arg in args)
 
@@ -141,7 +142,7 @@ class TestMacOSAdapter:
 
         adapter.play_sound(sound_type="success")
 
-        args = mock_executor.execute.call_args[0][0]
+        args = mock_executor.execute_with_timeout.call_args[0][0]
         assert any("Glass" in arg for arg in args)
 
     def test_play_sound_file(self, mock_executor):
@@ -152,28 +153,84 @@ class TestMacOSAdapter:
         with patch('pathlib.Path.exists', return_value=True):
             adapter.play_sound(sound_file=sound_file)
 
-        mock_executor.execute.assert_called_once_with(["afplay", "--volume", "100", sound_file])
+        mock_executor.execute_with_timeout.assert_called_once()
+        args, timeout = mock_executor.execute_with_timeout.call_args[0]
+        assert args == ["afplay", "--volume", "100", sound_file]
+        assert timeout > 0
+
+    def test_play_sound_raises_on_command_failure(self, mock_executor):
+        """底层命令失败时应抛出异常，避免误报成功。"""
+        mock_executor.execute_with_timeout.return_value = ProcessResult(
+            return_code=1,
+            stdout="",
+            stderr="afplay boom"
+        )
+        adapter = MacOSAdapter(mock_executor)
+
+        with pytest.raises(CommandExecutionError):
+            adapter.play_sound(sound_type="Glass", volume=0.1)
 
     def test_show_notification(self, mock_executor):
         """测试显示通知"""
         adapter = MacOSAdapter(mock_executor)
 
-        adapter.show_notification("Title", "Message")
+        with patch('vibe_notification.adapters.check_command', side_effect=lambda cmd: cmd == "terminal-notifier"), \
+             patch.object(adapter, "_detect_sender_bundle_id", return_value="com.microsoft.VSCode"):
+            adapter.show_notification("Title", "Message")
 
-        mock_executor.execute.assert_called_once()
-        command = mock_executor.execute.call_args[0][0]
-        assert command[0] == "osascript"
-        assert "-e" in command
+        mock_executor.execute_with_timeout.assert_called_once()
+        command = mock_executor.execute_with_timeout.call_args[0][0]
+        assert command[:7] == [
+            "terminal-notifier",
+            "-title",
+            "Title",
+            "-message",
+            "Message",
+            "-sender",
+            "com.microsoft.VSCode",
+        ]
 
     def test_show_notification_with_subtitle(self, mock_executor):
         """测试显示带副标题的通知"""
         adapter = MacOSAdapter(mock_executor)
 
-        adapter.show_notification("Title", "Message", "Subtitle")
+        with patch('vibe_notification.adapters.check_command', return_value=False):
+            adapter.show_notification("Title", 'Message "quoted" \\ path', "Subtitle")
 
-        mock_executor.execute.assert_called_once()
-        command = mock_executor.execute.call_args[0][0]
-        assert "Subtitle" in " ".join(command)
+        mock_executor.execute_with_timeout.assert_called_once()
+        command = mock_executor.execute_with_timeout.call_args[0][0]
+        assert command[0] == "osascript"
+        assert '\\"quoted\\"' in command[2]
+        assert "\\\\ path" in command[2]
+        assert 'subtitle "Subtitle"' in command[2]
+
+    def test_detect_sender_bundle_id_from_parent_process_chain(self, mock_executor):
+        adapter = MacOSAdapter(mock_executor)
+
+        parent_ps = [
+            ProcessResult(0, "100 90 python3\n"),
+            ProcessResult(0, "90 80 /opt/homebrew/bin/codex\n"),
+            ProcessResult(0, "80 70 /Applications/Visual Studio Code.app/Contents/MacOS/Electron\n"),
+            ProcessResult(0, ""),
+        ]
+        defaults_result = ProcessResult(0, "com.microsoft.VSCode\n")
+        mock_executor.execute.side_effect = [*parent_ps, defaults_result]
+
+        sender_bundle_id = adapter._detect_sender_bundle_id()
+
+        assert sender_bundle_id == "com.microsoft.VSCode"
+
+    def test_show_notification_raises_on_command_failure(self, mock_executor):
+        """底层命令失败时应抛出异常，避免误报成功。"""
+        mock_executor.execute_with_timeout.return_value = ProcessResult(
+            return_code=1,
+            stdout="",
+            stderr="osascript boom"
+        )
+        adapter = MacOSAdapter(mock_executor)
+
+        with pytest.raises(CommandExecutionError):
+            adapter.show_notification("Title", "Message", "Subtitle")
 
     @patch('vibe_notification.adapters.check_command')
     def test_is_sound_available(self, mock_check_command):
@@ -187,11 +244,11 @@ class TestMacOSAdapter:
     @patch('vibe_notification.adapters.check_command')
     def test_is_notification_available(self, mock_check_command):
         """测试检查通知功能可用性"""
-        mock_check_command.return_value = True
+        mock_check_command.side_effect = lambda cmd: cmd == "terminal-notifier"
         adapter = MacOSAdapter(Mock())
 
         assert adapter.is_notification_available() is True
-        mock_check_command.assert_called_with("osascript")
+        assert mock_check_command.call_args_list[0].args == ("terminal-notifier",)
 
 
 class TestLinuxAdapter:

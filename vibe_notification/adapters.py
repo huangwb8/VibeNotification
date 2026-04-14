@@ -7,10 +7,14 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from pathlib import Path
+import os
 import subprocess
 import logging
 from .exceptions import CommandExecutionError, UnsupportedPlatformError
-from .utils import get_platform_info, check_command
+from .utils import get_platform_info, check_command, escape_for_osascript
+
+MACOS_SOUND_TIMEOUT_SECONDS = 3.0
+MACOS_NOTIFICATION_TIMEOUT_SECONDS = 3.0
 
 
 class ProcessResult:
@@ -110,6 +114,100 @@ class PlatformAdapter(ABC):
 class MacOSAdapter(PlatformAdapter):
     """macOS 平台适配器"""
 
+    def _iter_parent_commands(self, max_depth: int = 8) -> List[str]:
+        """读取当前进程的父进程链命令。"""
+        commands: List[str] = []
+        current_pid = os.getpid()
+
+        for _ in range(max_depth):
+            result = self.executor.execute(["ps", "-o", "pid=,ppid=,comm=", "-p", str(current_pid)])
+            if not result.success:
+                break
+
+            line = result.stdout.strip()
+            if not line:
+                break
+
+            try:
+                _, ppid_text, command = line.split(None, 2)
+            except ValueError:
+                break
+
+            commands.append(command.strip())
+
+            try:
+                current_pid = int(ppid_text)
+            except ValueError:
+                break
+
+            if current_pid <= 1:
+                break
+
+        return commands
+
+    def _extract_host_app_path(self, command: str) -> Optional[Path]:
+        """从进程命令中提取最外层 .app 路径。"""
+        if ".app/" not in command and not command.endswith(".app"):
+            return None
+
+        prefix, _, _ = command.partition(".app")
+        app_path = Path(prefix + ".app")
+        return app_path if app_path.exists() else None
+
+    def _read_bundle_identifier(self, app_path: Path) -> Optional[str]:
+        """读取 .app 的 bundle identifier。"""
+        info_plist = app_path / "Contents" / "Info"
+        result = self.executor.execute(["defaults", "read", str(info_plist), "CFBundleIdentifier"])
+        if not result.success:
+            return None
+
+        bundle_id = result.stdout.strip()
+        return bundle_id or None
+
+    def _detect_sender_bundle_id(self) -> Optional[str]:
+        """检测最合适的通知 sender。"""
+        env_sender = os.environ.get("VIBE_NOTIFICATION_SENDER_BUNDLE_ID")
+        if env_sender:
+            return env_sender.strip() or None
+
+        for command in self._iter_parent_commands():
+            app_path = self._extract_host_app_path(command)
+            if app_path is None:
+                continue
+
+            bundle_id = self._read_bundle_identifier(app_path)
+            if bundle_id:
+                return bundle_id
+
+        return None
+
+    def _build_terminal_notifier_command(
+        self,
+        title: str,
+        message: str,
+        subtitle: str = "",
+        sender_bundle_id: Optional[str] = None,
+    ) -> List[str]:
+        """构建 terminal-notifier 命令。"""
+        command = ["terminal-notifier", "-title", title, "-message", message]
+        if subtitle:
+            command.extend(["-subtitle", subtitle])
+        if sender_bundle_id:
+            command.extend(["-sender", sender_bundle_id])
+        return command
+
+    def _build_osascript_command(self, title: str, message: str, subtitle: str = "") -> List[str]:
+        """构建 osascript 命令，确保文本被正确转义。"""
+        escaped_title = escape_for_osascript(title)
+        escaped_message = escape_for_osascript(message)
+        applescript = f'display notification "{escaped_message}" with title "{escaped_title}"'
+
+        if subtitle:
+            escaped_subtitle = escape_for_osascript(subtitle)
+            applescript += f' subtitle "{escaped_subtitle}"'
+
+        return ["osascript", "-e", applescript]
+
     def __init__(self, executor: CommandExecutor):
         self.executor = executor
         self.logger = logging.getLogger(__name__)
@@ -135,22 +233,34 @@ class MacOSAdapter(PlatformAdapter):
             sound_name = sound_map.get(sound_type, "Ping")
             command = ["afplay", "--volume", str(int(volume * 100)), "/System/Library/Sounds/" + sound_name + ".aiff"]
 
-        result = self.executor.execute(command)
+        result = self.executor.execute_with_timeout(command, MACOS_SOUND_TIMEOUT_SECONDS)
         if not result.success:
-            self.logger.warning(f"Failed to play sound: {result.stderr}")
+            raise CommandExecutionError(command, result.return_code, result.stderr)
 
     def show_notification(self, title: str, message: str, subtitle: str = "") -> None:
-        """使用 osascript 显示通知"""
-        applescript = f'''
-        display notification "{message}" with title "{title}"
-        '''
-        if subtitle:
-            applescript = applescript.replace(f'title "{title}"', f'title "{title}" subtitle "{subtitle}"')
+        """优先使用 terminal-notifier，回退到 osascript 显示通知。"""
+        if check_command("terminal-notifier"):
+            sender_bundle_id = self._detect_sender_bundle_id()
+            command = self._build_terminal_notifier_command(
+                title,
+                message,
+                subtitle,
+                sender_bundle_id=sender_bundle_id,
+            )
+            if sender_bundle_id:
+                self.logger.debug(
+                    "Using terminal-notifier for macOS notification with sender %s",
+                    sender_bundle_id,
+                )
+            else:
+                self.logger.debug("Using terminal-notifier for macOS notification without sender")
+        else:
+            command = self._build_osascript_command(title, message, subtitle)
+            self.logger.debug("Using osascript fallback for macOS notification")
 
-        command = ["osascript", "-e", applescript]
-        result = self.executor.execute(command)
+        result = self.executor.execute_with_timeout(command, MACOS_NOTIFICATION_TIMEOUT_SECONDS)
         if not result.success:
-            self.logger.warning(f"Failed to show notification: {result.stderr}")
+            raise CommandExecutionError(command, result.return_code, result.stderr)
 
     def is_sound_available(self) -> bool:
         """检查 afplay 是否可用"""
@@ -158,7 +268,7 @@ class MacOSAdapter(PlatformAdapter):
 
     def is_notification_available(self) -> bool:
         """检查通知功能是否可用"""
-        return check_command("osascript")
+        return check_command("terminal-notifier") or check_command("osascript")
 
 
 class LinuxAdapter(PlatformAdapter):
@@ -200,7 +310,7 @@ class LinuxAdapter(PlatformAdapter):
 
         result = self.executor.execute(command)
         if not result.success:
-            self.logger.warning(f"Failed to play sound: {result.stderr}")
+            raise CommandExecutionError(command, result.return_code, result.stderr)
 
     def _set_system_volume(self, volume: float) -> None:
         """设置系统音量（仅对 aplay 有效）"""
@@ -225,7 +335,7 @@ class LinuxAdapter(PlatformAdapter):
 
         result = self.executor.execute(command)
         if not result.success:
-            self.logger.warning(f"Failed to show notification: {result.stderr}")
+            raise CommandExecutionError(command, result.return_code, result.stderr)
 
     def is_sound_available(self) -> bool:
         """检查声音播放器是否可用"""
@@ -276,7 +386,7 @@ class WindowsAdapter(PlatformAdapter):
         command = ["powershell.exe", "-Command", ps_command]
         result = self.executor.execute(command)
         if not result.success:
-            self.logger.warning(f"Failed to play sound: {result.stderr}")
+            raise CommandExecutionError(command, result.return_code, result.stderr)
 
     def show_notification(self, title: str, message: str, subtitle: str = "") -> None:
         """使用 Windows Toast 通知"""
@@ -336,7 +446,7 @@ class WindowsAdapter(PlatformAdapter):
             if result.success:
                 self.logger.info("NotifyIcon fallback succeeded")
             else:
-                self.logger.warning(f"Failed to show notification: {result.stderr}")
+                raise CommandExecutionError(command, result.return_code, result.stderr)
         else:
             self.logger.info("Toast notification sent successfully")
 

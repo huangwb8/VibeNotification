@@ -62,6 +62,11 @@ def mock_executor():
         stdout="Success",
         stderr=""
     )
+    executor.execute_with_timeout.return_value = ProcessResult(
+        return_code=0,
+        stdout="Success",
+        stderr=""
+    )
     return executor
 
 

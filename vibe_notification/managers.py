@@ -9,7 +9,6 @@ import logging
 import os
 import re
 import subprocess
-import threading
 from pathlib import Path
 from .models import NotificationConfig, NotificationEvent, NotificationLevel
 from .parsers import BaseParser, ClaudeCodeParser, CodexParser
@@ -82,29 +81,12 @@ class NotifierManager:
         successful = 0
         failed = 0
 
-        def _notify_async(notifier: BaseNotifier):
-            """后台执行声音通知，避免阻塞弹窗"""
-            try:
-                notifier.notify(title, message, level, subtitle=subtitle)
-                self.logger.debug(f"Notification sent via {notifier.__class__.__name__} (async)")
-            except Exception as e:
-                self.logger.warning(f"Notifier {notifier.__class__.__name__} failed asynchronously: {e}")
-
         for notifier in self.notifiers:
             if notifier.is_enabled():
                 try:
-                    if isinstance(notifier, SoundNotifier):
-                        # 声音播放采用后台线程，避免阻塞弹窗显示
-                        threading.Thread(
-                            target=_notify_async,
-                            args=(notifier,),
-                            daemon=True
-                        ).start()
-                        successful += 1
-                    else:
-                        notifier.notify(title, message, level, subtitle=subtitle)
-                        successful += 1
-                        self.logger.debug(f"Notification sent via {notifier.__class__.__name__}")
+                    notifier.notify(title, message, level, subtitle=subtitle)
+                    successful += 1
+                    self.logger.debug(f"Notification sent via {notifier.__class__.__name__}")
                 except Exception as e:
                     failed += 1
                     self.logger.warning(f"Notifier {notifier.__class__.__name__} failed: {e}")

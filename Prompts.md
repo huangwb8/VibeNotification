@@ -21,7 +21,37 @@ pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 
 根据 docs/plans/SDK-沙箱机制-v202602231445.md， 使用 awesome-code skill 优化代码，所有问题都要解决，所有意见都要落实。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。 不要破坏其它功能。 要保证最终成品能正常、稳定、高效地工作。 
 ```
 
+- 如果不行了，问
+
+```
+Claude Code 完成一轮回复，也不会收到通知。 是本机codex的config.toml有问题，还是vibe notification的源代码有问题？
+Codex 完成一轮回复，也不会收到通知。是本机codex的config.toml有问题，还是vibe notification的源代码有问题？
+```
+
 # 日常
+
+---
+
+还是不行。 我希望：
+- 用户在codex里输入命令
+- codex开始工作
+- codex结束本次回复
+- 触发通知
+目前没法做到这样； 我已经在codex里进行测试。 问题出在哪？
+
+---
+
+Claude Code 完成一轮回复，也不会收到弹窗通知。 是本机codex的config.toml有问题，还是vibe notification的源代码有问题？使用 awesome-code skill 辅助规划、优化。所有问题都要解决。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。不要破坏其它功能。要保证最终成品能正常、稳定、高效地工作。 
+
+Codex 完成一轮回复，也不会收到弹窗通知。是本机codex的config.toml有问题，还是vibe notification的源代码有问题？使用 awesome-code skill 辅助规划、优化。所有问题都要解决。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。不要破坏其它功能。要保证最终成品能正常、稳定、高效地工作。 
+
+---
+
+目前，本设备里的claude code/codex的提示似乎不生效了：尽管会话结束，仍然收不到vibe notification的通知。 这是为什么？ 如果是程序有bug，请使用 awesome-code skill 辅助规划、优化。所有问题都要解决。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。不要破坏其它功能。要保证最终成品能正常、稳定、高效地工作。 
+
+---
+
+目前，claude code的提示似乎不生效了：尽管会话结束，仍然收不到vibe notification的通知。 这是为什么？ 使用 awesome-code skill 辅助规划、优化。所有问题都要解决。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。不要破坏其它功能。要保证最终成品能正常、稳定、高效地工作。 
 
 ---
 

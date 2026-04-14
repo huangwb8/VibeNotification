@@ -7,15 +7,20 @@
 
 import sys
 import argparse
-from typing import Optional
+import shutil
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional, Sequence, Tuple
 from .core import VibeNotifier
 from .models import NotificationConfig
-from .config import load_config, save_config
+from .config import load_config, save_config, get_env_config
+from .doctor import format_doctor_report, run_doctor
 from .i18n import set_language, t
 from .input_utils import InputManager, select_language
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[Sequence[str]] = None) -> Tuple[argparse.Namespace, List[str]]:
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
         description="VibeNotification - 智能 AI 助手会话结束通知系统",
@@ -78,7 +83,27 @@ def parse_args() -> argparse.Namespace:
         help="显示版本信息"
     )
 
-    return parser.parse_args()
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="检查 Claude Code / Codex / VibeNotification 的本地集成状态"
+    )
+
+    parser.add_argument(
+        "--wrap-codex",
+        action="store_true",
+        help="启动 Codex，并在 Codex 进程退出后只发送一次通知"
+    )
+
+    args, extra_args = parser.parse_known_args(argv)
+
+    # wrapper 模式下，argparse 可能把第一个普通参数误吞成 event_json；
+    # 对 Codex 透传参数时需要把它拼回 extra_args。
+    if args.wrap_codex and args.event_json is not None:
+        extra_args = [args.event_json, *extra_args]
+        args.event_json = None
+
+    return args, extra_args
 
 
 def get_terminal_width() -> int:
@@ -259,9 +284,48 @@ def update_config_from_args(config: NotificationConfig, args: argparse.Namespace
     return config
 
 
+def _infer_codex_cwd(codex_args: Sequence[str]) -> str:
+    """从透传给 Codex 的参数中推断工作目录。"""
+    for index, value in enumerate(codex_args):
+        if value in {"-C", "--cd"} and index + 1 < len(codex_args):
+            return codex_args[index + 1]
+    return str(Path.cwd())
+
+
+def run_codex_wrapper(config: NotificationConfig, codex_args: Sequence[str]) -> int:
+    """启动 Codex，并在进程退出后发送一次 session-end 通知。"""
+    codex_path = shutil.which("codex")
+    if not codex_path:
+        print("未找到 codex 可执行文件，请先确认 Codex CLI 已安装到 PATH。", file=sys.stderr)
+        return 127
+
+    completed = subprocess.run([codex_path, *codex_args], check=False)
+
+    notifier = VibeNotifier(config)
+    from .models import NotificationEvent
+
+    event = NotificationEvent(
+        type="session-end",
+        agent="codex",
+        message="Codex 会话已结束",
+        summary="Codex 会话已结束",
+        timestamp=datetime.now().isoformat(),
+        conversation_end=True,
+        is_last_turn=True,
+        metadata={
+            "cwd": _infer_codex_cwd(codex_args),
+            "exit_code": completed.returncode,
+            "wrapped": True,
+            "wrapped_args": list(codex_args),
+        },
+    )
+    notifier.process_event(event)
+    return completed.returncode
+
+
 def main() -> None:
     """主函数"""
-    args = parse_args()
+    args, extra_args = parse_args()
 
     # 显示版本
     if args.version:
@@ -274,10 +338,17 @@ def main() -> None:
         interactive_config()
         return
 
+    if args.doctor:
+        print(format_doctor_report(run_doctor()))
+        return
+
     # 加载配置并应用命令行参数
-    config = load_config()
+    config = get_env_config()
     set_language(getattr(config, "language", "zh"))
     config = update_config_from_args(config, args)
+
+    if args.wrap_codex:
+        raise SystemExit(run_codex_wrapper(config, extra_args))
 
     # 创建通知器
     notifier = VibeNotifier(config)
@@ -285,7 +356,6 @@ def main() -> None:
     # 测试模式
     if args.test:
         from .models import NotificationEvent
-        from datetime import datetime
         event = NotificationEvent(
             type="test",
             agent="vibe-notification",

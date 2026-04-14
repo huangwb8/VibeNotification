@@ -32,6 +32,7 @@
 ### Claude Code
 
 - 可选钩子：`Stop`（每次回复）、`SessionEnd`（会话结束）、`SubagentStop`（Task 完成）
+- 如果你关心的是“整个 Claude Code 会话真正结束”，优先用 `SessionEnd`；`Stop` 只是“单轮回复结束”。
 - 在 `~/.claude/settings.json` 添加 Stop 钩子：
 
 ```json
@@ -142,27 +143,34 @@ notify = ["python3", "-m", "vibe_notification"]
 ```
 
 注意：这里的 `notify` 是“每轮回复结束”触发，不是“整个 Codex 会话退出”触发。
+按 2026 年 4 月 14 日 OpenAI 当前文档，Codex 的 `notify` 以及 `Stop`/hook 类事件仍然是 turn 语义，不是整个进程退出语义。
 
-如果你只希望在整个 Codex 会话结束后再通知，请不要配置 `notify`，改为用一个 wrapper 启动 Codex。仓库已提供示例脚本 [examples/codex_session_end_wrapper.py](/Volumes/2T01/winE/Starup/VibeNotification/examples/codex_session_end_wrapper.py)：
+如果你只希望在整个 Codex 会话退出后再通知，不要依赖 `notify`，改用内置 wrapper：
 
 ```bash
-python examples/codex_session_end_wrapper.py
+python -m vibe_notification --wrap-codex
 ```
 
 如果你平时会带参数启动 Codex，也可以原样透传：
 
 ```bash
-python examples/codex_session_end_wrapper.py --help
-python examples/codex_session_end_wrapper.py -C /path/to/project
+python -m vibe_notification --wrap-codex -- --help
+python -m vibe_notification --wrap-codex -- -C /path/to/project
 ```
 
 想把它当成日常入口的话，可以在 shell 里加一个别名，例如：
 
 ```bash
-alias codexn='python /Volumes/2T01/winE/Starup/VibeNotification/examples/codex_session_end_wrapper.py'
+alias codexn='python3 -m vibe_notification --wrap-codex --'
 ```
 
-之后用 `codexn` 代替 `codex` 启动；这样只有当 Codex 进程真正退出时，VibeNotification 才会发送一次通知。
+之后直接用 `codexn` 启动；这样只有当 Codex 进程真正退出时，VibeNotification 才会发送一次通知。
+
+想快速检查本机接入状态，也可以运行：
+
+```bash
+python -m vibe_notification --doctor
+```
 
 典型配置位置：
 

@@ -19,8 +19,8 @@ from .models import NotificationEvent
 
 logger = logging.getLogger(__name__)
 
-# 默认冷却期（秒）：收到 turn-complete 后等待这么久，若无新事件则发送通知
-DEFAULT_COOLDOWN_SECONDS = 8
+# 默认冷却期（秒）：默认关闭，只有显式设置环境变量时才启用防抖
+DEFAULT_COOLDOWN_SECONDS = 0
 
 # 会话状态目录
 SESSION_STATE_DIR = Path.home() / ".config" / "vibe-notification" / "sessions"
@@ -50,6 +50,10 @@ def should_debounce(event: NotificationEvent) -> bool:
     才需要防抖。其他事件（hook 事件、明确的 session-end 等）直接放行。
     """
     if not event.agent or "codex" not in event.agent.lower():
+        return False
+
+    cooldown = int(os.environ.get("VIBE_DEBOUNCE_COOLDOWN", DEFAULT_COOLDOWN_SECONDS))
+    if cooldown <= 0:
         return False
 
     # session-end / hook 事件直接放行
@@ -130,6 +134,9 @@ def handle_codex_turn_event(event_data: Dict[str, Any], event: NotificationEvent
         return False
 
     cooldown = int(os.environ.get("VIBE_DEBOUNCE_COOLDOWN", DEFAULT_COOLDOWN_SECONDS))
+    if cooldown <= 0:
+        return False
+
     state_path = write_session_state(event_data, event)
     spawn_debounce_worker(state_path, cooldown)
     return True

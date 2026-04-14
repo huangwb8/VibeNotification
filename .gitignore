@@ -173,7 +173,10 @@ test_output/
 *.temp
 
 # Cache
-tests/
+tests/*
+!tests/unit/
+tests/unit/*
+!tests/unit/test_cli.py
 tests/upload_prompts.md
 tmp/
 

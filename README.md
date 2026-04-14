@@ -32,6 +32,7 @@ English | [中文](README.zh.md)
 ### Claude Code
 
 - Hooks you can use: `Stop` (on every reply), `SessionEnd` (when the session ends), `SubagentStop` (Task tool completes)
+- If you care about the whole Claude Code session actually ending, prefer `SessionEnd`. `Stop` is only per-reply.
 - Edit `~/.claude/settings.json` and add a Stop hook:
 
 ```json
@@ -142,27 +143,34 @@ notify = ["python3", "-m", "vibe_notification"]
 ```
 
 Note: `notify` is turn-based, not session-exit-based.
+As of April 14, 2026, OpenAI's current Codex docs still describe `notify` and `Stop`/hook-style events as turn-scoped rather than whole-process-exit signals.
 
-If you only want one notification after the whole Codex session exits, do not configure `notify`. Instead, start Codex through the wrapper example at [examples/codex_session_end_wrapper.py](/Volumes/2T01/winE/Starup/VibeNotification/examples/codex_session_end_wrapper.py):
+If you only want one notification after the whole Codex session exits, do not rely on `notify`. Use the built-in wrapper:
 
 ```bash
-python examples/codex_session_end_wrapper.py
+python -m vibe_notification --wrap-codex
 ```
 
 You can pass normal Codex arguments through unchanged:
 
 ```bash
-python examples/codex_session_end_wrapper.py --help
-python examples/codex_session_end_wrapper.py -C /path/to/project
+python -m vibe_notification --wrap-codex -- --help
+python -m vibe_notification --wrap-codex -- -C /path/to/project
 ```
 
 If you want this as your everyday entrypoint, add a shell alias such as:
 
 ```bash
-alias codexn='python /Volumes/2T01/winE/Starup/VibeNotification/examples/codex_session_end_wrapper.py'
+alias codexn='python3 -m vibe_notification --wrap-codex --'
 ```
 
-Then launch `codexn` instead of `codex`; VibeNotification will fire only once, after the Codex process actually exits.
+Then launch `codexn`; VibeNotification will fire only once, after the Codex process actually exits.
+
+To inspect your local integration and spot config/semantic mismatches quickly:
+
+```bash
+python -m vibe_notification --doctor
+```
 
 Typical placement in `config.toml`:
 

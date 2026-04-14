@@ -139,6 +139,24 @@ class TestNotifierManager:
         with pytest.raises(NotifierError):
             manager.send_notifications("Title", "Message", NotificationLevel.INFO)
 
+    def test_send_notifications_stops_reporting_success_when_later_notifier_fails(self, mock_config, mock_platform_adapter):
+        """后续通知器失败时，应明确抛错而不是误报全部成功。"""
+        first = Mock(spec=BaseNotifier)
+        first.is_enabled.return_value = True
+
+        second = Mock(spec=BaseNotifier)
+        second.is_enabled.return_value = True
+        second.notify.side_effect = Exception("boom")
+
+        manager = NotifierManager(mock_config, mock_platform_adapter)
+        manager.notifiers = [first, second]
+
+        with pytest.raises(NotifierError):
+            manager.send_notifications("Title", "Message", NotificationLevel.INFO)
+
+        first.notify.assert_called_once()
+        second.notify.assert_called_once()
+
     def test_add_notifier(self, mock_config, mock_platform_adapter):
         """测试添加通知器"""
         manager = NotifierManager(mock_config, mock_platform_adapter)
