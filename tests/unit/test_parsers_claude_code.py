@@ -42,3 +42,26 @@ def test_stdin_without_tool_name_still_detects_end(monkeypatch):
     assert event.conversation_end is True
     assert event.tool_name is None
     assert event.agent == "claude-code"
+
+
+def test_claude_parser_ignores_codex_stop_hook_payload(monkeypatch):
+    """Codex 的 Stop hook 负载不应被 Claude 解析器误认成 Claude Stop。"""
+    data = {
+        "hook_event_name": "Stop",
+        "cwd": "/tmp/project",
+        "model": "gpt-5-codex",
+        "permission_mode": "default",
+        "last_assistant_message": "Working on it",
+        "session_id": "session-1",
+        "stop_hook_active": False,
+        "transcript_path": None,
+    }
+    monkeypatch.delenv("CLAUDE_HOOK_EVENT", raising=False)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(data)))
+
+    import vibe_notification.parsers._stdin as _stdin_mod
+    monkeypatch.setattr(_stdin_mod, "_cache", _stdin_mod._UNREAD)
+
+    parser = ClaudeCodeParser()
+
+    assert parser.can_parse() is False

@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 
 from .base import BaseParser
 from ._stdin import get_stdin_json
+from ..detectors.conversation import _looks_like_codex_payload
 from ..models import NotificationEvent
 
 
@@ -22,6 +23,10 @@ class ClaudeCodeParser(BaseParser):
 
     # Claude Code 钩子事件名（与 Claude Code 发送的大小写一致）
     HOOK_EVENTS = {"Stop", "SessionEnd", "SubagentStop", "PostToolUse", "PreToolUse", "ToolError"}
+
+    def _is_codex_payload(self, payload: Optional[Dict[str, Any]]) -> bool:
+        """避免把 Codex 的 stdin/hook 负载误识别成 Claude 事件。"""
+        return isinstance(payload, dict) and _looks_like_codex_payload(payload)
 
     def _get_hook_event(self) -> Optional[str]:
         """从环境变量或 stdin JSON 获取钩子事件名。"""
@@ -33,6 +38,8 @@ class ClaudeCodeParser(BaseParser):
         # 从 stdin JSON 检查 hook_event_name
         stdin_json = get_stdin_json()
         if isinstance(stdin_json, dict):
+            if self._is_codex_payload(stdin_json):
+                return None
             name = stdin_json.get("hook_event_name")
             if name and name in self.HOOK_EVENTS:
                 return name
@@ -46,7 +53,10 @@ class ClaudeCodeParser(BaseParser):
             return True
 
         # 2. stdin 有 JSON 数据（用于 stdin 直接传入工具数据的场景）
-        if get_stdin_json():
+        stdin_json = get_stdin_json()
+        if self._is_codex_payload(stdin_json):
+            return False
+        if stdin_json:
             return True
 
         # 3. 其他 Claude Code 相关环境变量
@@ -136,6 +146,9 @@ class ClaudeCodeParser(BaseParser):
 
         stdin_json = get_stdin_json()
         if not isinstance(stdin_json, dict):
+            return None
+
+        if self._is_codex_payload(stdin_json):
             return None
 
         # 如果已经有 hook_event_name 匹配，跳过（已在 _parse_hook_event 处理）

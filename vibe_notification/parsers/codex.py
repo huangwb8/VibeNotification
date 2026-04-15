@@ -6,6 +6,7 @@ Codex 解析器
 
 import json
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +29,14 @@ class CodexParser(BaseParser):
         "posttooluse": "post-tool-use",
         "stop": "stop-hook",
     }
+
+    def _looks_like_claude_hook_payload(self, event_data: Dict[str, Any]) -> bool:
+        """只在明确是 Claude 钩子时让出解析权，避免误伤 Codex 同名 hook。"""
+        if os.environ.get("CLAUDE_HOOK_EVENT") or os.environ.get("CLAUDE_HOOK_COMMAND"):
+            return True
+
+        tool_name = self._get_value(event_data, "toolName", "tool_name")
+        return isinstance(tool_name, str) and bool(tool_name.strip())
 
     def _load_event_data(self) -> Optional[Dict[str, Any]]:
         """读取并校验事件数据。
@@ -214,10 +223,8 @@ class CodexParser(BaseParser):
 
         # 拒绝 Claude Code 钩子事件（由 ClaudeCodeParser 处理）
         hook_event_name = event_data.get("hook_event_name", "")
-        if hook_event_name in {"Stop", "SessionEnd", "SubagentStop"}:
-            claude_markers = {"stop_hook_active", "transcript_path", "permission_mode"}
-            if claude_markers & event_data.keys():
-                return False
+        if hook_event_name in {"Stop", "SessionEnd", "SubagentStop"} and self._looks_like_claude_hook_payload(event_data):
+            return False
 
         return True
 
