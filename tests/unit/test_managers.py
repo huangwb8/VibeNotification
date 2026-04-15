@@ -31,10 +31,37 @@ class TestParserManager:
     def test_get_available_parser(self):
         """测试获取可用解析器"""
         manager = ParserManager()
-        with patch.object(CodexParser, "can_parse", return_value=True):
+        with patch.object(manager, "detect_parser_type", return_value="codex"), \
+             patch.object(CodexParser, "can_parse", return_value=True):
             parser = manager.get_available_parser()
         assert parser is not None
         assert isinstance(parser, BaseParser)
+
+    def test_get_available_parser_only_checks_routed_parser(self, monkeypatch):
+        """来源已判定后，只应检查对应 parser，不再让解析器相互探测。"""
+        manager = ParserManager()
+
+        claude_parser = Mock(spec=BaseParser)
+        claude_parser.parser_type = "claude_code"
+        claude_parser.can_parse.return_value = True
+
+        codex_parser = Mock(spec=BaseParser)
+        codex_parser.parser_type = "codex"
+        codex_parser.can_parse.return_value = True
+
+        manager.parsers = [claude_parser, codex_parser]
+        manager.parsers_by_type = {
+            "claude_code": claude_parser,
+            "codex": codex_parser,
+        }
+
+        monkeypatch.setattr(manager, "detect_parser_type", lambda: "claude_code")
+
+        parser = manager.get_available_parser()
+
+        assert parser is claude_parser
+        claude_parser.can_parse.assert_called_once()
+        codex_parser.can_parse.assert_not_called()
 
     def test_add_parser(self):
         """测试添加解析器"""

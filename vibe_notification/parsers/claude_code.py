@@ -8,25 +8,51 @@ Claude Code 解析器
 """
 
 import os
-import sys
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 from .base import BaseParser
 from ._stdin import get_stdin_json
-from ..detectors.conversation import _looks_like_codex_payload
+from .routing import is_claude_context
 from ..models import NotificationEvent
 
 
 class ClaudeCodeParser(BaseParser):
     """Claude Code 解析器"""
 
+    parser_type = "claude_code"
+
     # Claude Code 钩子事件名（与 Claude Code 发送的大小写一致）
     HOOK_EVENTS = {"Stop", "SessionEnd", "SubagentStop", "PostToolUse", "PreToolUse", "ToolError"}
 
-    def _is_codex_payload(self, payload: Optional[Dict[str, Any]]) -> bool:
-        """避免把 Codex 的 stdin/hook 负载误识别成 Claude 事件。"""
-        return isinstance(payload, dict) and _looks_like_codex_payload(payload)
+    def _detect_conversation_end(self, payload: Dict[str, Any]) -> bool:
+        """Claude 专用的会话结束判断，不再依赖 Codex 感知逻辑。"""
+        for key in ("is_last_turn", "conversation_end", "conversation_finished", "final", "closed"):
+            if key in payload and bool(payload.get(key)):
+                return True
+
+        event_type = payload.get("type") or payload.get("event")
+        if isinstance(event_type, str):
+            normalized = event_type.replace("_", "-").strip().lower()
+            if normalized in {"agent-turn-complete", "turn-complete", "session-end"}:
+                return True
+            if "turn" in normalized and "complete" in normalized:
+                return True
+
+        for key in ("finish_reason", "stop_reason", "stopReason", "reason"):
+            reason = payload.get(key)
+            if isinstance(reason, str) and reason.strip().lower() in {"stop", "end", "complete", "completed", "done"}:
+                return True
+
+        tool_name = payload.get("toolName") or payload.get("tool_name")
+        if isinstance(tool_name, str) and tool_name.strip():
+            return True
+
+        state = payload.get("conversation_state") or payload.get("state")
+        if isinstance(state, str) and state.strip().lower() in {"finished", "ended", "closed", "complete"}:
+            return True
+
+        return False
 
     def _get_hook_event(self) -> Optional[str]:
         """从环境变量或 stdin JSON 获取钩子事件名。"""
@@ -38,8 +64,6 @@ class ClaudeCodeParser(BaseParser):
         # 从 stdin JSON 检查 hook_event_name
         stdin_json = get_stdin_json()
         if isinstance(stdin_json, dict):
-            if self._is_codex_payload(stdin_json):
-                return None
             name = stdin_json.get("hook_event_name")
             if name and name in self.HOOK_EVENTS:
                 return name
@@ -48,22 +72,7 @@ class ClaudeCodeParser(BaseParser):
 
     def can_parse(self) -> bool:
         """检查是否在 Claude Code 钩子上下文中。"""
-        # 1. 通过环境变量或 stdin hook_event_name 匹配
-        if self._get_hook_event():
-            return True
-
-        # 2. stdin 有 JSON 数据（用于 stdin 直接传入工具数据的场景）
-        stdin_json = get_stdin_json()
-        if self._is_codex_payload(stdin_json):
-            return False
-        if stdin_json:
-            return True
-
-        # 3. 其他 Claude Code 相关环境变量
-        if os.environ.get("CLAUDE_HOOK_COMMAND") or os.environ.get("CLAUDE_HOOK_TOOL_NAME"):
-            return True
-
-        return False
+        return is_claude_context()
 
     def _parse_hook_event(self) -> Optional[NotificationEvent]:
         """解析钩子事件（环境变量 + stdin JSON 统一入口）。"""
@@ -142,13 +151,8 @@ class ClaudeCodeParser(BaseParser):
 
     def _parse_stdin_data(self) -> Optional[NotificationEvent]:
         """解析 stdin JSON 数据（非 hook_event_name 场景的回退）。"""
-        from ..detectors.conversation import detect_conversation_end_from_hook
-
         stdin_json = get_stdin_json()
         if not isinstance(stdin_json, dict):
-            return None
-
-        if self._is_codex_payload(stdin_json):
             return None
 
         # 如果已经有 hook_event_name 匹配，跳过（已在 _parse_hook_event 处理）
@@ -156,7 +160,7 @@ class ClaudeCodeParser(BaseParser):
             return None
 
         tool_name = stdin_json.get("toolName") or stdin_json.get("tool_name")
-        conversation_end = detect_conversation_end_from_hook(stdin_json)
+        conversation_end = self._detect_conversation_end(stdin_json)
 
         if tool_name:
             message = f"使用工具: {tool_name}"

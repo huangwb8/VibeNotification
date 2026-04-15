@@ -65,3 +65,31 @@ def test_claude_parser_ignores_codex_stop_hook_payload(monkeypatch):
     parser = ClaudeCodeParser()
 
     assert parser.can_parse() is False
+
+
+def test_claude_parser_accepts_real_claude_stop_hook_from_stdin(monkeypatch):
+    """Claude 官方 stdin Stop hook 不应被误判成 Codex。"""
+    data = {
+        "hook_event_name": "Stop",
+        "session_id": "session-1",
+        "transcript_path": "/tmp/claude-transcript.jsonl",
+        "cwd": "/tmp/project",
+        "permission_mode": "default",
+        "stop_hook_active": False,
+    }
+    monkeypatch.delenv("CLAUDE_HOOK_EVENT", raising=False)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(data)))
+
+    import vibe_notification.parsers._stdin as _stdin_mod
+    monkeypatch.setattr(_stdin_mod, "_cache", _stdin_mod._UNREAD)
+
+    parser = ClaudeCodeParser()
+
+    assert parser.can_parse() is True
+
+    event = parser.parse()
+
+    assert event is not None
+    assert event.agent == "claude-code"
+    assert event.conversation_end is True
+    assert event.metadata.get("event") == "Stop"

@@ -6,19 +6,20 @@ Codex 解析器
 
 import json
 import logging
-import os
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 from .base import BaseParser
 from ._stdin import get_stdin_json
+from .routing import is_codex_context
 from ..models import NotificationEvent
 from ..detectors.conversation import detect_conversation_end
 
 
 class CodexParser(BaseParser):
     """Codex 解析器"""
+
+    parser_type = "codex"
 
     DEBUG_CAPTURE_PATH = Path.home() / ".config" / "vibe-notification" / "debug" / "codex-events.jsonl"
 
@@ -30,14 +31,6 @@ class CodexParser(BaseParser):
         "stop": "stop-hook",
     }
 
-    def _looks_like_claude_hook_payload(self, event_data: Dict[str, Any]) -> bool:
-        """只在明确是 Claude 钩子时让出解析权，避免误伤 Codex 同名 hook。"""
-        if os.environ.get("CLAUDE_HOOK_EVENT") or os.environ.get("CLAUDE_HOOK_COMMAND"):
-            return True
-
-        tool_name = self._get_value(event_data, "toolName", "tool_name")
-        return isinstance(tool_name, str) and bool(tool_name.strip())
-
     def _load_event_data(self) -> Optional[Dict[str, Any]]:
         """读取并校验事件数据。
 
@@ -46,13 +39,11 @@ class CodexParser(BaseParser):
         2. Codex hooks.json / stdin: 数据通过 stdin 传入（共享缓存，仅读一次）
         """
         # 优先尝试 argv（notify 机制）
-        if len(sys.argv) >= 2:
-            try:
-                event_data = json.loads(sys.argv[-1])
-                if isinstance(event_data, dict):
-                    return event_data
-            except Exception:
-                pass
+        from .routing import get_argv_json
+
+        event_data = get_argv_json()
+        if isinstance(event_data, dict):
+            return event_data
 
         # 使用共享 stdin 缓存（避免重复读取导致数据丢失）
         stdin_json = get_stdin_json()
@@ -217,16 +208,7 @@ class CodexParser(BaseParser):
 
     def can_parse(self) -> bool:
         """检查是否可以解析 Codex 事件"""
-        event_data = self._load_event_data()
-        if event_data is None:
-            return False
-
-        # 拒绝 Claude Code 钩子事件（由 ClaudeCodeParser 处理）
-        hook_event_name = event_data.get("hook_event_name", "")
-        if hook_event_name in {"Stop", "SessionEnd", "SubagentStop"} and self._looks_like_claude_hook_payload(event_data):
-            return False
-
-        return True
+        return is_codex_context()
 
     def parse(self) -> Optional[NotificationEvent]:
         """解析 Codex 事件"""

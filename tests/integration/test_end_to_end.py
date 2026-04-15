@@ -52,9 +52,11 @@ class TestEndToEnd:
             tool_name="test-tool"
         )
 
-        with patch('vibe_notification.managers.CodexParser') as MockParser:
+        with patch('vibe_notification.managers.CodexParser') as MockParser, \
+             patch('vibe_notification.managers.detect_parser_type', return_value="codex"):
             # 配置模拟解析器
             parser_instance = MockParser.return_value
+            parser_instance.parser_type = "codex"
             parser_instance.can_parse.return_value = True
             parser_instance.parse.return_value = mock_event
 
@@ -99,9 +101,11 @@ class TestEndToEnd:
 
     def test_error_handling_flow(self, mock_config):
         """测试错误处理流程"""
-        with patch('vibe_notification.managers.CodexParser') as MockParser:
+        with patch('vibe_notification.managers.CodexParser') as MockParser, \
+             patch('vibe_notification.managers.detect_parser_type', return_value="codex"):
             # 配置解析器抛出异常
             parser_instance = MockParser.return_value
+            parser_instance.parser_type = "codex"
             parser_instance.can_parse.return_value = True
             parser_instance.parse.side_effect = Exception("Parse error")
 
@@ -162,8 +166,10 @@ class TestEndToEnd:
             tool_name="test-tool"
         )
 
-        with patch('vibe_notification.managers.CodexParser') as MockParser:
+        with patch('vibe_notification.managers.CodexParser') as MockParser, \
+             patch('vibe_notification.managers.detect_parser_type', return_value="codex"):
             parser_instance = MockParser.return_value
+            parser_instance.parser_type = "codex"
             parser_instance.can_parse.return_value = True
             parser_instance.parse.return_value = mock_event
 

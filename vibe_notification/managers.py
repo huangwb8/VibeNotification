@@ -16,6 +16,7 @@ from .notifiers import BaseNotifier, SoundNotifier, SystemNotifier
 from .adapters import PlatformAdapter, CommandExecutor, DefaultCommandExecutor, create_platform_adapter
 from .exceptions import NotifierError
 from .i18n import t
+from .parsers.routing import detect_parser_type
 
 
 class ParserManager:
@@ -32,25 +33,42 @@ class ParserManager:
             ClaudeCodeParser(),
             CodexParser(),
         ]
+        self.parsers_by_type = {
+            getattr(parser, "parser_type", parser.__class__.__name__.lower()): parser
+            for parser in self.parsers
+        }
         self.logger.info(f"Initialized {len(self.parsers)} parsers")
+
+    def detect_parser_type(self) -> Optional[str]:
+        """检测当前上下文对应的 parser 类型。"""
+        return detect_parser_type()
 
     def get_available_parser(self) -> Optional[BaseParser]:
         """获取当前可用的解析器"""
-        for parser in self.parsers:
-            if parser.can_parse():
-                self.logger.debug(f"Using parser: {parser.__class__.__name__}")
-                return parser
+        parser_type = self.detect_parser_type()
+        if parser_type is None:
+            self.logger.warning("No parser route detected")
+            return None
+
+        parser = self.parsers_by_type.get(parser_type)
+        if parser and parser.can_parse():
+            self.logger.debug(f"Using parser: {parser.__class__.__name__}")
+            return parser
         self.logger.warning("No suitable parser found")
         return None
 
     def add_parser(self, parser: BaseParser):
         """添加新的解析器"""
         self.parsers.append(parser)
+        self.parsers_by_type[getattr(parser, "parser_type", parser.__class__.__name__.lower())] = parser
         self.logger.info(f"Added parser: {parser.__class__.__name__}")
 
     def remove_parser(self, parser_type: type):
         """移除指定类型的解析器"""
+        removed = [p for p in self.parsers if isinstance(p, parser_type)]
         self.parsers = [p for p in self.parsers if not isinstance(p, parser_type)]
+        for parser in removed:
+            self.parsers_by_type.pop(getattr(parser, "parser_type", parser.__class__.__name__.lower()), None)
         self.logger.info(f"Removed parsers of type: {parser_type.__name__}")
 
     def list_parsers(self) -> List[str]:

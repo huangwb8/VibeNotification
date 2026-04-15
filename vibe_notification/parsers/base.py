@@ -13,6 +13,8 @@ from ..models import NotificationEvent
 class BaseParser(ABC):
     """解析器基类"""
 
+    parser_type = "base"
+
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
 
