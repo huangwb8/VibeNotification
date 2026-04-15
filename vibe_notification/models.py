@@ -40,6 +40,7 @@ class NotificationConfig:
     log_level: str = "INFO"
     detect_conversation_end: bool = True
     language: str = "zh"  # 语言：zh 或 en
+    macos_sender_mode: str = "auto"  # auto/off/force
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""

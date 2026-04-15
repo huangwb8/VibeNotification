@@ -170,6 +170,12 @@ def _analyze_notification_backend() -> Iterable[DoctorFinding]:
             scope="macos",
             summary="检测到 terminal-notifier，VibeNotification 将优先使用它发送弹窗。",
         )
+        yield DoctorFinding(
+            level="INFO",
+            scope="macos",
+            summary="Claude Code 场景默认不绑定 sender，以提高横幅弹窗稳定性。",
+            recommendation="如需沿用宿主 App 图标/归属，可显式设置 VIBE_NOTIFICATION_SENDER_MODE=auto 或 force。",
+        )
     elif shutil.which("osascript"):
         yield DoctorFinding(
             level="INFO",

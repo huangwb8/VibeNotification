@@ -30,7 +30,7 @@ class VibeNotifier:
 
         # 创建组件
         self.executor = AdapterFactory.create_default_executor()
-        self.platform_adapter = AdapterFactory.create_platform_adapter(self.executor)
+        self.platform_adapter = AdapterFactory.create_platform_adapter(self.executor, self.config)
         self.parser_manager = ParserManager()
         self.notifier_manager = NotifierManager(self.config, self.platform_adapter)
         self.notification_builder = NotificationBuilder()

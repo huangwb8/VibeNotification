@@ -33,6 +33,7 @@
 
 - 可选钩子：`Stop`（每次回复）、`SessionEnd`（会话结束）、`SubagentStop`（Task 完成）
 - 如果你关心的是“整个 Claude Code 会话真正结束”，优先用 `SessionEnd`；`Stop` 只是“单轮回复结束”。
+- 在 macOS 下，VibeNotification 现在会在 Claude Code hook 场景默认关闭 `sender` 绑定，以提高横幅弹窗稳定性；如需沿用宿主 App 图标/归属，可设置 `VIBE_NOTIFICATION_SENDER_MODE=auto`。
 - 在 `~/.claude/settings.json` 添加 Stop 钩子：
 
 ```json
@@ -43,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -74,7 +75,7 @@
       {
         "hooks": [
           {
-            "command": "python -m vibe_notification",
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification",
             "type": "command"
           }
         ]
@@ -96,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -115,7 +116,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -125,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -264,6 +265,7 @@ python -m vibe_notification --notification 0 --test
 - `VIBE_NOTIFICATION_SOUND=0`：临时禁用声音
 - `VIBE_NOTIFICATION_NOTIFY=0`：临时禁用弹窗
 - `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG`：启用调试日志；Codex 原始 payload 会额外写入 `~/.config/vibe-notification/debug/codex-events.jsonl`
+- `VIBE_NOTIFICATION_SENDER_MODE=off|auto|force`：控制 macOS `terminal-notifier` 是否绑定 sender；Claude Code hook 默认使用 `off`
 
 Codex 示例：
 
@@ -288,7 +290,7 @@ Claude Code 示例：
         "hooks": [
           {
             "type": "command",
-            "command": "env VIBE_NOTIFICATION_SOUND=0 python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SOUND=0 VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -303,6 +305,7 @@ Claude Code 示例：
 VIBE_NOTIFICATION_SOUND=0 python -m vibe_notification --test
 VIBE_NOTIFICATION_SOUND=0 VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification --test
 VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python -m vibe_notification --test
+VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification --test
 ```
 
 ### 声音类型
@@ -447,8 +450,10 @@ notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_not
 | `enable_notification` | 布尔 | `true` | 启用系统通知 |
 | `notification_timeout` | 整数 | `10000` | 显示时长（毫秒） |
 | `sound_type` | 字符串 | `"default"` | 声音类型 |
+| `sound_volume` | 浮点 | `0.1` | 音量大小 |
 | `log_level` | 字符串 | `"INFO"` | 日志级别 |
 | `detect_conversation_end` | 布尔 | `true` | 检测会话结束 |
+| `macos_sender_mode` | 字符串 | `"auto"` | macOS sender 模式：`auto`、`off`、`force` |
 
 ### 环境变量
 
@@ -457,6 +462,7 @@ notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_not
 | `VIBE_NOTIFICATION_SOUND` | 覆盖声音设置 | `VIBE_NOTIFICATION_SOUND=0` |
 | `VIBE_NOTIFICATION_NOTIFY` | 覆盖弹窗设置 | `VIBE_NOTIFICATION_NOTIFY=0` |
 | `VIBE_NOTIFICATION_LOG_LEVEL` | 覆盖日志级别 | `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` |
+| `VIBE_NOTIFICATION_SENDER_MODE` | 覆盖 macOS sender 模式 | `VIBE_NOTIFICATION_SENDER_MODE=off` |
 
 ### 常用命令
 

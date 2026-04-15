@@ -14,6 +14,7 @@ from vibe_notification.adapters import (
     UnsupportedPlatformError
 )
 from vibe_notification.exceptions import CommandExecutionError
+from vibe_notification.models import NotificationConfig
 from tests.conftest import command_result_success, command_result_failure
 
 
@@ -189,6 +190,56 @@ class TestMacOSAdapter:
             "-sender",
             "com.microsoft.VSCode",
         ]
+
+    def test_show_notification_skips_sender_in_claude_context_by_default(self, mock_executor, monkeypatch):
+        """Claude Code 场景默认不绑定 sender，避免横幅被宿主 App 通知策略吞掉。"""
+        adapter = MacOSAdapter(mock_executor)
+        monkeypatch.setenv("CLAUDE_HOOK_EVENT", "Stop")
+
+        with patch('vibe_notification.adapters.check_command', side_effect=lambda cmd: cmd == "terminal-notifier"), \
+             patch.object(adapter, "_detect_sender_bundle_id", return_value="com.microsoft.VSCode"):
+            adapter.show_notification("Title", "Message")
+
+        mock_executor.execute_with_timeout.assert_called_once()
+        command = mock_executor.execute_with_timeout.call_args[0][0]
+        assert "-sender" not in command
+
+    def test_show_notification_uses_sender_when_explicitly_enabled_for_claude(self, mock_executor, monkeypatch):
+        """允许通过环境变量显式恢复 sender。"""
+        adapter = MacOSAdapter(mock_executor)
+        monkeypatch.setenv("CLAUDE_HOOK_EVENT", "Stop")
+        monkeypatch.setenv("VIBE_NOTIFICATION_SENDER_MODE", "auto")
+
+        with patch('vibe_notification.adapters.check_command', side_effect=lambda cmd: cmd == "terminal-notifier"), \
+             patch.object(adapter, "_detect_sender_bundle_id", return_value="com.microsoft.VSCode"):
+            adapter.show_notification("Title", "Message")
+
+        mock_executor.execute_with_timeout.assert_called_once()
+        command = mock_executor.execute_with_timeout.call_args[0][0]
+        assert command[:7] == [
+            "terminal-notifier",
+            "-title",
+            "Title",
+            "-message",
+            "Message",
+            "-sender",
+            "com.microsoft.VSCode",
+        ]
+
+    def test_show_notification_respects_config_sender_mode(self, mock_executor):
+        """配置文件中的 macos_sender_mode 也应生效。"""
+        adapter = MacOSAdapter(
+            mock_executor,
+            config=NotificationConfig(macos_sender_mode="off"),
+        )
+
+        with patch('vibe_notification.adapters.check_command', side_effect=lambda cmd: cmd == "terminal-notifier"), \
+             patch.object(adapter, "_detect_sender_bundle_id", return_value="com.microsoft.VSCode"):
+            adapter.show_notification("Title", "Message")
+
+        mock_executor.execute_with_timeout.assert_called_once()
+        command = mock_executor.execute_with_timeout.call_args[0][0]
+        assert "-sender" not in command
 
     def test_show_notification_with_subtitle(self, mock_executor):
         """测试显示带副标题的通知"""

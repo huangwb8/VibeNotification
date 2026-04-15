@@ -4,7 +4,7 @@
 提供创建各种组件的工厂方法
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .models import NotificationConfig
 from .parsers import BaseParser, ClaudeCodeParser, CodexParser
 from .notifiers import BaseNotifier, SoundNotifier, SystemNotifier
@@ -124,8 +124,11 @@ class AdapterFactory:
         return DefaultCommandExecutor()
 
     @staticmethod
-    def create_platform_adapter(executor: CommandExecutor = None) -> PlatformAdapter:
+    def create_platform_adapter(
+        executor: CommandExecutor = None,
+        config: Optional[NotificationConfig] = None,
+    ) -> PlatformAdapter:
         """创建平台适配器"""
         if executor is None:
             executor = AdapterFactory.create_default_executor()
-        return create_platform_adapter(executor)
+        return create_platform_adapter(executor, config=config)

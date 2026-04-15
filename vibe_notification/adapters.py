@@ -11,6 +11,7 @@ import os
 import subprocess
 import logging
 from .exceptions import CommandExecutionError, UnsupportedPlatformError
+from .models import NotificationConfig
 from .utils import get_platform_info, check_command, escape_for_osascript
 
 MACOS_SOUND_TIMEOUT_SECONDS = 3.0
@@ -114,6 +115,37 @@ class PlatformAdapter(ABC):
 class MacOSAdapter(PlatformAdapter):
     """macOS 平台适配器"""
 
+    SENDER_MODES = {"auto", "off", "force"}
+
+    def _normalize_sender_mode(self, value: Optional[str]) -> str:
+        if not isinstance(value, str):
+            return "auto"
+
+        normalized = value.strip().lower()
+        return normalized if normalized in self.SENDER_MODES else "auto"
+
+    def _is_claude_hook_context(self) -> bool:
+        """Claude Code hook 场景优先稳定展示横幅，而不是继承宿主 App 身份。"""
+        return any(
+            os.environ.get(name)
+            for name in ("CLAUDE_HOOK_EVENT", "CLAUDE_HOOK_COMMAND", "CLAUDE_HOOK_TOOL_NAME")
+        )
+
+    def _get_sender_mode(self) -> str:
+        env_mode = self._normalize_sender_mode(os.environ.get("VIBE_NOTIFICATION_SENDER_MODE"))
+        if os.environ.get("VIBE_NOTIFICATION_SENDER_MODE"):
+            return env_mode
+
+        if self.config is not None:
+            config_mode = self._normalize_sender_mode(getattr(self.config, "macos_sender_mode", "auto"))
+            if config_mode != "auto":
+                return config_mode
+
+        if self._is_claude_hook_context():
+            return "off"
+
+        return "auto"
+
     def _iter_parent_commands(self, max_depth: int = 8) -> List[str]:
         """读取当前进程的父进程链命令。"""
         commands: List[str] = []
@@ -166,10 +198,6 @@ class MacOSAdapter(PlatformAdapter):
 
     def _detect_sender_bundle_id(self) -> Optional[str]:
         """检测最合适的通知 sender。"""
-        env_sender = os.environ.get("VIBE_NOTIFICATION_SENDER_BUNDLE_ID")
-        if env_sender:
-            return env_sender.strip() or None
-
         for command in self._iter_parent_commands():
             app_path = self._extract_host_app_path(command)
             if app_path is None:
@@ -208,8 +236,34 @@ class MacOSAdapter(PlatformAdapter):
 
         return ["osascript", "-e", applescript]
 
-    def __init__(self, executor: CommandExecutor):
+    def _resolve_sender_bundle_id(self) -> Optional[str]:
+        """根据配置与上下文决定是否绑定 sender。"""
+        mode = self._get_sender_mode()
+        if mode == "off":
+            self.logger.debug("Skipping macOS sender binding because sender mode is off")
+            return None
+
+        env_sender = os.environ.get("VIBE_NOTIFICATION_SENDER_BUNDLE_ID")
+        if env_sender:
+            sender_bundle_id = env_sender.strip() or None
+            if sender_bundle_id:
+                self.logger.debug("Using sender bundle id from environment override: %s", sender_bundle_id)
+            return sender_bundle_id
+
+        sender_bundle_id = self._detect_sender_bundle_id()
+        if sender_bundle_id:
+            self.logger.debug(
+                "Resolved sender bundle id %s with sender mode %s",
+                sender_bundle_id,
+                mode,
+            )
+        else:
+            self.logger.debug("No sender bundle id resolved with sender mode %s", mode)
+        return sender_bundle_id
+
+    def __init__(self, executor: CommandExecutor, config: Optional[NotificationConfig] = None):
         self.executor = executor
+        self.config = config
         self.logger = logging.getLogger(__name__)
 
     def play_sound(self, sound_file: Optional[str] = None, sound_type: str = "default", volume: float = 1.0) -> None:
@@ -240,7 +294,7 @@ class MacOSAdapter(PlatformAdapter):
     def show_notification(self, title: str, message: str, subtitle: str = "") -> None:
         """优先使用 terminal-notifier，回退到 osascript 显示通知。"""
         if check_command("terminal-notifier"):
-            sender_bundle_id = self._detect_sender_bundle_id()
+            sender_bundle_id = self._resolve_sender_bundle_id()
             command = self._build_terminal_notifier_command(
                 title,
                 message,
@@ -260,6 +314,24 @@ class MacOSAdapter(PlatformAdapter):
 
         result = self.executor.execute_with_timeout(command, MACOS_NOTIFICATION_TIMEOUT_SECONDS)
         if not result.success:
+            if command[0] == "terminal-notifier" and check_command("osascript"):
+                self.logger.warning(
+                    "terminal-notifier failed (%s), falling back to osascript",
+                    result.stderr or result.return_code,
+                )
+                fallback_command = self._build_osascript_command(title, message, subtitle)
+                fallback_result = self.executor.execute_with_timeout(
+                    fallback_command,
+                    MACOS_NOTIFICATION_TIMEOUT_SECONDS,
+                )
+                if fallback_result.success:
+                    return
+                raise CommandExecutionError(
+                    fallback_command,
+                    fallback_result.return_code,
+                    fallback_result.stderr,
+                )
+
             raise CommandExecutionError(command, result.return_code, result.stderr)
 
     def is_sound_available(self) -> bool:
@@ -459,7 +531,10 @@ class WindowsAdapter(PlatformAdapter):
         return check_command("powershell.exe")
 
 
-def create_platform_adapter(executor: CommandExecutor) -> PlatformAdapter:
+def create_platform_adapter(
+    executor: CommandExecutor,
+    config: Optional[NotificationConfig] = None,
+) -> PlatformAdapter:
     """创建平台适配器"""
     platform_info = get_platform_info()
 
@@ -475,7 +550,7 @@ def create_platform_adapter(executor: CommandExecutor) -> PlatformAdapter:
             pass
 
     if platform_info["system"] == "Darwin":
-        return MacOSAdapter(executor)
+        return MacOSAdapter(executor, config=config)
     elif is_wsl or platform_info["system"] == "Windows":
         # WSL环境使用Windows适配器
         return WindowsAdapter(executor)

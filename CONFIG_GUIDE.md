@@ -69,6 +69,7 @@ python -m vibe_notification --config
 | 通知超时 | 系统通知显示时间(毫秒) | 10000 | 1000-60000 |
 | 声音类型 | 通知提示音类型 | Glass | Glass/Ping/Pop/Tink/Basso |
 | 声音大小 | 音量大小(0.0-1.0) | 0.1 | 0.0-1.0 |
+| macOS sender 模式 | 是否给 terminal-notifier 绑定宿主 App sender | auto | auto/off/force |
 
 ### 快捷键
 
@@ -91,6 +92,9 @@ python -m vibe_notification --notification 0    # 禁用
 
 # 设置日志级别
 python -m vibe_notification --log-level DEBUG
+
+# macOS：若 Claude Code 有日志但没有横幅，可显式关闭 sender 绑定
+VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification --test
 
 # 测试通知
 python -m vibe_notification --test

@@ -174,7 +174,7 @@ class TestAdapterFactory:
         adapter = AdapterFactory.create_platform_adapter()
 
         mock_executor_class.assert_called_once()
-        mock_create_adapter.assert_called_once_with(mock_executor)
+        mock_create_adapter.assert_called_once_with(mock_executor, config=None)
 
     @patch('vibe_notification.factories.create_platform_adapter')
     def test_create_platform_adapter_custom_executor(self, mock_create_adapter):
@@ -184,4 +184,4 @@ class TestAdapterFactory:
 
         adapter = AdapterFactory.create_platform_adapter(mock_executor)
 
-        mock_create_adapter.assert_called_once_with(mock_executor)
+        mock_create_adapter.assert_called_once_with(mock_executor, config=None)

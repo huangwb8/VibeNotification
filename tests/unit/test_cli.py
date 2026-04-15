@@ -83,6 +83,7 @@ def test_doctor_reports_semantic_gap_between_stop_and_notify(tmp_path, monkeypat
     assert "notify 只在 agent 完成一轮回复时触发" in report
     assert "VibeNotification 系统弹窗已启用" in report
     assert "检测到 terminal-notifier" in report
+    assert "Claude Code 场景默认不绑定 sender" in report
 
 
 def test_main_uses_env_config_override_for_notification_flag(monkeypatch, capsys):

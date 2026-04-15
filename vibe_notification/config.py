@@ -79,4 +79,9 @@ def get_env_config() -> NotificationConfig:
         if lang in ("zh", "en"):
             config.language = lang
 
+    if os.environ.get("VIBE_NOTIFICATION_SENDER_MODE"):
+        sender_mode = os.environ["VIBE_NOTIFICATION_SENDER_MODE"].strip().lower()
+        if sender_mode in {"auto", "off", "force"}:
+            config.macos_sender_mode = sender_mode
+
     return config

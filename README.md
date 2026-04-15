@@ -33,6 +33,7 @@ English | [中文](README.zh.md)
 
 - Hooks you can use: `Stop` (on every reply), `SessionEnd` (when the session ends), `SubagentStop` (Task tool completes)
 - If you care about the whole Claude Code session actually ending, prefer `SessionEnd`. `Stop` is only per-reply.
+- On macOS, VibeNotification now defaults to `sender` off in Claude Code hook contexts for more reliable banners. If you explicitly want host-app attribution/icon, set `VIBE_NOTIFICATION_SENDER_MODE=auto`.
 - Edit `~/.claude/settings.json` and add a Stop hook:
 
 ```json
@@ -43,7 +44,7 @@ English | [中文](README.zh.md)
         "hooks": [
           {
             "type": "command",
-            "command": "python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -74,7 +75,7 @@ English | [中文](README.zh.md)
       {
         "hooks": [
           {
-            "command": "python -m vibe_notification",
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification",
             "type": "command"
           }
         ]
@@ -96,7 +97,7 @@ English | [中文](README.zh.md)
         "hooks": [
           {
             "type": "command",
-            "command": "python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -115,7 +116,7 @@ English | [中文](README.zh.md)
         "hooks": [
           {
             "type": "command",
-            "command": "python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -125,7 +126,7 @@ English | [中文](README.zh.md)
         "hooks": [
           {
             "type": "command",
-            "command": "python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -264,6 +265,7 @@ python -m vibe_notification --notification 0 --test
 - `VIBE_NOTIFICATION_SOUND=0` — mute sound
 - `VIBE_NOTIFICATION_NOTIFY=0` — disable system notification
 - `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` — enable debug logging; raw Codex payloads are also appended to `~/.config/vibe-notification/debug/codex-events.jsonl`
+- `VIBE_NOTIFICATION_SENDER_MODE=off|auto|force` — control macOS `terminal-notifier` sender binding; Claude Code hooks default to `off`
 
 Codex examples:
 
@@ -288,7 +290,7 @@ Claude Code example:
         "hooks": [
           {
             "type": "command",
-            "command": "env VIBE_NOTIFICATION_SOUND=0 python -m vibe_notification"
+            "command": "env VIBE_NOTIFICATION_SOUND=0 VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification"
           }
         ]
       }
@@ -303,6 +305,7 @@ CLI tests:
 VIBE_NOTIFICATION_SOUND=0 python -m vibe_notification --test
 VIBE_NOTIFICATION_SOUND=0 VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification --test
 VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python -m vibe_notification --test
+VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification --test
 ```
 
 ### Sound type
@@ -447,8 +450,10 @@ Location: `~/.config/vibe-notification/config.json`
 | `enable_notification` | bool | `true` | Enable system notification |
 | `notification_timeout` | int | `10000` | Duration in ms |
 | `sound_type` | string | `"default"` | Sound type |
+| `sound_volume` | float | `0.1` | Sound volume |
 | `log_level` | string | `"INFO"` | Log level |
 | `detect_conversation_end` | bool | `true` | Detect end of conversation |
+| `macos_sender_mode` | string | `"auto"` | Sender mode for macOS: `auto`, `off`, or `force` |
 
 ### Environment variables
 
@@ -457,6 +462,7 @@ Location: `~/.config/vibe-notification/config.json`
 | `VIBE_NOTIFICATION_SOUND` | Override sound setting | `VIBE_NOTIFICATION_SOUND=0` |
 | `VIBE_NOTIFICATION_NOTIFY` | Override notification setting | `VIBE_NOTIFICATION_NOTIFY=0` |
 | `VIBE_NOTIFICATION_LOG_LEVEL` | Override log level | `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` |
+| `VIBE_NOTIFICATION_SENDER_MODE` | Override macOS sender binding mode | `VIBE_NOTIFICATION_SENDER_MODE=off` |
 
 ### Typical commands
 
