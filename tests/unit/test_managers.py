@@ -3,6 +3,7 @@
 """
 
 import os
+import threading
 import pytest
 from unittest.mock import Mock, patch
 from vibe_notification.models import NotificationConfig, NotificationEvent, NotificationLevel
@@ -183,6 +184,33 @@ class TestNotifierManager:
 
         first.notify.assert_called_once()
         second.notify.assert_called_once()
+
+    def test_send_notifications_starts_enabled_notifiers_concurrently(self, mock_config, mock_platform_adapter):
+        """声音与弹窗应并发启动，避免一个阻塞另一个。"""
+        first = Mock(spec=BaseNotifier)
+        first.is_enabled.return_value = True
+
+        second = Mock(spec=BaseNotifier)
+        second.is_enabled.return_value = True
+
+        second_started = threading.Event()
+        observed = {}
+
+        def first_notify(*args, **kwargs):
+            observed["second_started_before_first_return"] = second_started.wait(timeout=0.1)
+
+        def second_notify(*args, **kwargs):
+            second_started.set()
+
+        first.notify.side_effect = first_notify
+        second.notify.side_effect = second_notify
+
+        manager = NotifierManager(mock_config, mock_platform_adapter)
+        manager.notifiers = [first, second]
+
+        manager.send_notifications("Title", "Message", NotificationLevel.INFO)
+
+        assert observed["second_started_before_first_return"] is True
 
     def test_add_notifier(self, mock_config, mock_platform_adapter):
         """测试添加通知器"""

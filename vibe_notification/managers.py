@@ -4,6 +4,7 @@
 负责管理解析器、通知器等组件
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Dict, Any
 import logging
 import os
@@ -98,21 +99,39 @@ class NotifierManager:
         """发送通知到所有启用的通知器"""
         successful = 0
         failed = 0
+        enabled_notifiers: List[BaseNotifier] = []
 
         for notifier in self.notifiers:
             if notifier.is_enabled():
-                try:
-                    notifier.notify(title, message, level, subtitle=subtitle)
-                    successful += 1
-                    self.logger.debug(f"Notification sent via {notifier.__class__.__name__}")
-                except Exception as e:
-                    failed += 1
-                    self.logger.warning(f"Notifier {notifier.__class__.__name__} failed: {e}")
-                    raise NotifierError(f"Failed to send notification via {notifier.__class__.__name__}: {e}")
+                enabled_notifiers.append(notifier)
             else:
                 self.logger.debug(f"Notifier {notifier.__class__.__name__} is disabled")
 
+        first_error: Optional[NotifierError] = None
+        if enabled_notifiers:
+            with ThreadPoolExecutor(max_workers=len(enabled_notifiers), thread_name_prefix="vibe-notify") as executor:
+                future_map = {
+                    executor.submit(notifier.notify, title, message, level, subtitle=subtitle): notifier
+                    for notifier in enabled_notifiers
+                }
+
+                for future in as_completed(future_map):
+                    notifier = future_map[future]
+                    try:
+                        future.result()
+                        successful += 1
+                        self.logger.debug(f"Notification sent via {notifier.__class__.__name__}")
+                    except Exception as e:
+                        failed += 1
+                        self.logger.warning(f"Notifier {notifier.__class__.__name__} failed: {e}")
+                        if first_error is None:
+                            first_error = NotifierError(
+                                f"Failed to send notification via {notifier.__class__.__name__}: {e}"
+                            )
+
         self.logger.info(f"Notifications sent: {successful} successful, {failed} failed")
+        if first_error is not None:
+            raise first_error
 
     def add_notifier(self, notifier: BaseNotifier):
         """添加新的通知器"""

@@ -9,7 +9,7 @@ python -m vibe_notification --version
 - 升级
 
 ```
-version=1.0.15
+version=1.0.16
 pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 git-commit skill创建commit信息；通过git-publish-release skill 发布release。推送新版本到pypi。然后，在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装这个版本。
 ```
 
