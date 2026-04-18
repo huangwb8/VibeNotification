@@ -4,6 +4,7 @@
 检测会话是否结束
 """
 
+import re
 from typing import Any, Dict
 
 # 定义常见的“本轮完成”事件类型关键字
@@ -86,6 +87,68 @@ CODEX_PROGRESS_MESSAGE_PREFIXES = (
     "正在",
     "开始",
 )
+
+CODEX_ACKNOWLEDGEMENT_PREFIXES = (
+    "ok",
+    "okay",
+    "sure",
+    "got it",
+    "understood",
+    "sounds good",
+    "好的",
+    "好",
+    "收到",
+    "明白",
+    "明白了",
+    "行",
+    "可以",
+    "没问题",
+)
+
+CODEX_TERMINAL_MESSAGE_KEYWORDS = (
+    "done",
+    "fixed",
+    "implemented",
+    "updated",
+    "verified",
+    "completed",
+    "finished",
+    "resolved",
+    "refactored",
+    "root cause",
+    "here is",
+    "here's",
+    "what i changed",
+    "what i found",
+    "the issue was",
+    "the bug was",
+    "原因是",
+    "根因",
+    "结论",
+    "总结",
+    "如下",
+    "已完成",
+    "完成了",
+    "已修复",
+    "修复了",
+    "已更新",
+    "更新了",
+    "已验证",
+    "验证通过",
+    "处理好了",
+    "已定位",
+    "定位到",
+)
+
+CODEX_TERMINAL_MESSAGE_PATTERNS = (
+    r"\b(i|we)\s+(fixed|implemented|updated|verified|completed|finished|resolved|refactored|changed|found)\b",
+    r"\b(the issue|the bug|root cause)\s+(is|was)\b",
+    r"\bhere(?:'s| is)\b",
+    r"(已|已经).{0,8}(修复|完成|更新|验证|定位|处理)",
+    r"(原因|根因).{0,8}(是|在于)",
+)
+
+_LEADING_PUNCTUATION = " \t\r\n,.;:!?，。；：！？-"
 
 
 def _normalize_event_name(value: Any) -> str:
@@ -174,7 +237,51 @@ def _looks_like_codex_progress_message(message: str) -> bool:
     if not normalized:
         return False
 
-    return any(normalized.startswith(prefix) for prefix in CODEX_PROGRESS_MESSAGE_PREFIXES)
+    candidate = normalized
+
+    changed = True
+    while changed and candidate:
+        changed = False
+        for prefix in CODEX_ACKNOWLEDGEMENT_PREFIXES:
+            if candidate == prefix:
+                return True
+            if candidate.startswith(prefix):
+                remainder = candidate[len(prefix):]
+                if not remainder or remainder[0] in _LEADING_PUNCTUATION:
+                    candidate = remainder.lstrip(_LEADING_PUNCTUATION)
+                    changed = True
+                    break
+
+    if not candidate:
+        return True
+
+    return any(candidate.startswith(prefix) for prefix in CODEX_PROGRESS_MESSAGE_PREFIXES)
+
+
+def _looks_like_codex_terminal_message(message: str) -> bool:
+    """判断 assistant 文本是否包含足够强的最终答复信号。"""
+    if not isinstance(message, str):
+        return False
+
+    stripped = message.strip()
+    if not stripped:
+        return False
+
+    normalized = " ".join(stripped.lower().split())
+
+    if "```" in stripped or "\n" in stripped:
+        return True
+
+    if re.search(r"(?m)^\s*[-*]\s+\S", stripped):
+        return True
+
+    if any(keyword in normalized for keyword in CODEX_TERMINAL_MESSAGE_KEYWORDS):
+        return True
+
+    if any(re.search(pattern, normalized) for pattern in CODEX_TERMINAL_MESSAGE_PATTERNS):
+        return True
+
+    return len(stripped) >= 120
 
 
 def _codex_turn_complete_has_terminal_content(event: Dict[str, Any]) -> bool:
@@ -183,7 +290,10 @@ def _codex_turn_complete_has_terminal_content(event: Dict[str, Any]) -> bool:
     if not assistant_message:
         return False
 
-    return not _looks_like_codex_progress_message(assistant_message)
+    if _looks_like_codex_progress_message(assistant_message):
+        return False
+
+    return _looks_like_codex_terminal_message(assistant_message)
 
 
 def _contains_codex_hook_event(event: Dict[str, Any]) -> bool:
