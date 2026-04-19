@@ -77,10 +77,10 @@ def _analyze_claude_settings(path: Path) -> Iterable[DoctorFinding]:
         )
     else:
         yield DoctorFinding(
-            level="WARN",
+            level="INFO",
             scope="claude",
-            summary="Claude Code 尚未配置 SessionEnd hook。",
-            recommendation="如果你关心“整个 Claude 会话退出”而非“单轮回复结束”，请补 SessionEnd hook。",
+            summary="Claude Code 未配置 SessionEnd hook（可选）。",
+            recommendation="如果你只关心“某次回复结束”，当前的 Stop hook 就够了；只有明确需要会话真正结束时才考虑 SessionEnd。",
         )
 
 
@@ -175,6 +175,12 @@ def _analyze_notification_backend() -> Iterable[DoctorFinding]:
             scope="macos",
             summary="Claude Code 场景默认不绑定 sender，以提高横幅弹窗稳定性。",
             recommendation="如需沿用宿主 App 图标/归属，可显式设置 VIBE_NOTIFICATION_SENDER_MODE=auto 或 force。",
+        )
+        yield DoctorFinding(
+            level="INFO",
+            scope="macos",
+            summary="终端/CLI 宿主场景也会默认不绑定 sender，避免继承 VS Code / Terminal 等宿主 App 的通知样式。",
+            recommendation="如果通知只进入通知中心，请到 系统设置 > 通知 检查 terminal-notifier 或宿主 App 的允许通知、横幅/提醒样式，以及专注模式/屏幕共享限制。",
         )
     elif shutil.which("osascript"):
         yield DoctorFinding(

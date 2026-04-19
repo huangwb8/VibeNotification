@@ -32,8 +32,10 @@ English | [中文](README.zh.md)
 ### Claude Code
 
 - Hooks you can use: `Stop` (on every reply), `SessionEnd` (when the session ends), `SubagentStop` (Task tool completes)
-- If you care about the whole Claude Code session actually ending, prefer `SessionEnd`. `Stop` is only per-reply.
-- On macOS, VibeNotification now defaults to `sender` off in Claude Code hook contexts for more reliable banners. If you explicitly want host-app attribution/icon, set `VIBE_NOTIFICATION_SENDER_MODE=auto`.
+- If what you want is "notify me when this reply is done", use `Stop`. That is the default and usually the only hook you need.
+- `SessionEnd` is optional and only useful if you explicitly want a notification when the entire Claude Code session exits. Many users do not need it because session exit is user-initiated.
+- On macOS, VibeNotification now defaults to `sender` off in Claude Code hook contexts and terminal-hosted CLI contexts for more reliable banners. If you explicitly want host-app attribution/icon, set `VIBE_NOTIFICATION_SENDER_MODE=auto`.
+- If a notification appears only in Notification Center, check `System Settings > Notifications` for the effective app (`terminal-notifier` when sender is off, or the host app such as VS Code / Terminal when sender is auto/force). Make sure notifications are allowed, banner/alert style is enabled, and Focus is not suppressing them.
 - Edit `~/.claude/settings.json` and add a Stop hook:
 
 ```json
@@ -265,7 +267,7 @@ python -m vibe_notification --notification 0 --test
 - `VIBE_NOTIFICATION_SOUND=0` — mute sound
 - `VIBE_NOTIFICATION_NOTIFY=0` — disable system notification
 - `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` — enable debug logging; raw Codex payloads are also appended to `~/.config/vibe-notification/debug/codex-events.jsonl`
-- `VIBE_NOTIFICATION_SENDER_MODE=off|auto|force` — control macOS `terminal-notifier` sender binding; Claude Code hooks default to `off`
+- `VIBE_NOTIFICATION_SENDER_MODE=off|auto|force` — control macOS `terminal-notifier` sender binding; Claude Code hooks and terminal-hosted CLI contexts default to `off`
 
 Codex examples:
 

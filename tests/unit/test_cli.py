@@ -78,12 +78,13 @@ def test_doctor_reports_semantic_gap_between_stop_and_notify(tmp_path, monkeypat
     report = format_doctor_report(run_doctor())
 
     assert "Claude Code 已配置 Stop hook" in report
-    assert "Claude Code 尚未配置 SessionEnd hook" in report
+    assert "Claude Code 未配置 SessionEnd hook（可选）" in report
     assert "Codex 已配置 notify 命令" in report
     assert "notify 只在 agent 完成一轮回复时触发" in report
     assert "VibeNotification 系统弹窗已启用" in report
     assert "检测到 terminal-notifier" in report
     assert "Claude Code 场景默认不绑定 sender" in report
+    assert "如果你只关心“某次回复结束”，当前的 Stop hook 就够了" in report
 
 
 def test_main_uses_env_config_override_for_notification_flag(monkeypatch, capsys):

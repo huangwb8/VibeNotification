@@ -116,6 +116,32 @@ class MacOSAdapter(PlatformAdapter):
     """macOS 平台适配器"""
 
     SENDER_MODES = {"auto", "off", "force"}
+    TERMINAL_HOST_HINTS = (
+        "visual studio code.app",
+        "code helper",
+        "cursor.app",
+        "windsurf.app",
+        "zed.app",
+        "terminal.app",
+        "iterm",
+        "warp.app",
+        "wezterm.app",
+        "alacritty.app",
+        "kitty.app",
+        "ghostty.app",
+    )
+    CLI_PROCESS_NAMES = (
+        "codex",
+        "claude",
+        "python",
+        "python3",
+        "bash",
+        "zsh",
+        "fish",
+        "sh",
+        "node",
+        "tmux",
+    )
 
     def _normalize_sender_mode(self, value: Optional[str]) -> str:
         if not isinstance(value, str):
@@ -131,6 +157,31 @@ class MacOSAdapter(PlatformAdapter):
             for name in ("CLAUDE_HOOK_EVENT", "CLAUDE_HOOK_COMMAND", "CLAUDE_HOOK_TOOL_NAME")
         )
 
+    def _is_terminal_host_context(self) -> bool:
+        """检测当前是否运行在终端/CLI 宿主中。"""
+        commands = self._iter_parent_commands()
+        if not commands:
+            return False
+
+        saw_cli_process = False
+        saw_terminal_host = False
+
+        for command in commands:
+            normalized = command.strip().lower()
+            if not normalized:
+                continue
+
+            executable = normalized.split()[0]
+            executable_name = Path(executable).name.lower()
+            if executable_name in self.CLI_PROCESS_NAMES:
+                saw_cli_process = True
+
+            if ".app/" in normalized or normalized.endswith(".app"):
+                if any(hint in normalized for hint in self.TERMINAL_HOST_HINTS):
+                    saw_terminal_host = True
+
+        return saw_cli_process and saw_terminal_host
+
     def _get_sender_mode(self) -> str:
         env_mode = self._normalize_sender_mode(os.environ.get("VIBE_NOTIFICATION_SENDER_MODE"))
         if os.environ.get("VIBE_NOTIFICATION_SENDER_MODE"):
@@ -142,6 +193,9 @@ class MacOSAdapter(PlatformAdapter):
                 return config_mode
 
         if self._is_claude_hook_context():
+            return "off"
+
+        if self._is_terminal_host_context():
             return "off"
 
         return "auto"

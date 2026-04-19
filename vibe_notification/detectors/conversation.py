@@ -237,14 +237,15 @@ def _looks_like_codex_progress_message(message: str) -> bool:
     if not normalized:
         return False
 
+    if normalized in CODEX_ACKNOWLEDGEMENT_PREFIXES:
+        return False
+
     candidate = normalized
 
     changed = True
     while changed and candidate:
         changed = False
         for prefix in CODEX_ACKNOWLEDGEMENT_PREFIXES:
-            if candidate == prefix:
-                return True
             if candidate.startswith(prefix):
                 remainder = candidate[len(prefix):]
                 if not remainder or remainder[0] in _LEADING_PUNCTUATION:
@@ -292,6 +293,11 @@ def _codex_turn_complete_has_terminal_content(event: Dict[str, Any]) -> bool:
 
     if _looks_like_codex_progress_message(assistant_message):
         return False
+
+    event_type = _normalize_event_name(event.get("type") or event.get("event"))
+    method = _normalize_event_name(event.get("method"))
+    if event_type in CODEX_NOTIFY_EVENT_TYPES or method in CODEX_APP_SERVER_METHODS:
+        return True
 
     return _looks_like_codex_terminal_message(assistant_message)
 

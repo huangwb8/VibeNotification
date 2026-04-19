@@ -9,14 +9,14 @@ python -m vibe_notification --version
 - 升级
 
 ```
-version=1.0.16
-pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 git-commit skill创建commit信息；通过git-publish-release skill 发布release。推送新版本到pypi。然后，在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装这个版本。
+version=1.0.17
+pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 git-commit skill创建commit信息；通过git-publish-release skill 发布release。推送新版本到pypi。然后，在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装最新版本。
 ```
 
 - 测试
 
 ```
-在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装最新版本，并实际地测试下是否按预期工作。
+在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装vibe notification源代码的最新状态，并实际地测试下vibe notification是否按预期工作。
 ```
 
 - 通用开发软件的prompt
@@ -34,7 +34,17 @@ Claude Code 完成一轮回复，也不会收到通知。 是本机codex的confi
 Codex 完成一轮回复，也不会收到通知。是本机codex的config.toml有问题，还是vibe notification的源代码有问题？
 ```
 
+- 注意事项：
+
+```
+注意：我要的是“某个回复结束就通知”，不是 SessionEnd。
+```
+
 # 日常
+
+---
+
+目前，弹窗有了，声音有了； 但是， 这个弹窗不像之前那样会直接弹出来； 必须我调出通知中心才能看到（目前是MacOS）。而且，如果我用codex cli或者claude code cli，通知（弹窗+声音）是没有的。这些都在很严重的bug。也有可能是macOS的设置问题，这个你也要核实一下。 使用 awesome-code skill 辅助规划、优化。所有问题都要解决。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。不要破坏其它功能。要保证最终成品能正常、稳定、高效地工作。 注意：我要的是“某个回复结束就通知”，不是 SessionEnd。
 
 ---
 

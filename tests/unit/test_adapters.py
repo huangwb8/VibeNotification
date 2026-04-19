@@ -241,6 +241,48 @@ class TestMacOSAdapter:
         command = mock_executor.execute_with_timeout.call_args[0][0]
         assert "-sender" not in command
 
+    def test_show_notification_skips_sender_in_terminal_host_context_by_default(self, mock_executor):
+        """终端/CLI 宿主场景默认不绑定 sender，避免继承宿主 App 的通知样式。"""
+        adapter = MacOSAdapter(mock_executor)
+
+        with patch('vibe_notification.adapters.check_command', side_effect=lambda cmd: cmd == "terminal-notifier"), \
+             patch.object(
+                 adapter,
+                 "_iter_parent_commands",
+                 return_value=[
+                     "python",
+                     "/opt/homebrew/bin/codex",
+                     "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+                 ],
+             ), \
+             patch.object(adapter, "_detect_sender_bundle_id", return_value="com.microsoft.VSCode"):
+            adapter.show_notification("Title", "Message")
+
+        mock_executor.execute_with_timeout.assert_called_once()
+        command = mock_executor.execute_with_timeout.call_args[0][0]
+        assert "-sender" not in command
+
+    def test_show_notification_skips_sender_in_plain_terminal_shell_context(self, mock_executor):
+        """普通 Terminal -> shell -> python 链路也应默认关闭 sender。"""
+        adapter = MacOSAdapter(mock_executor)
+
+        with patch('vibe_notification.adapters.check_command', side_effect=lambda cmd: cmd == "terminal-notifier"), \
+             patch.object(
+                 adapter,
+                 "_iter_parent_commands",
+                 return_value=[
+                     "python",
+                     "zsh",
+                     "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+                 ],
+             ), \
+             patch.object(adapter, "_detect_sender_bundle_id", return_value="com.apple.Terminal"):
+            adapter.show_notification("Title", "Message")
+
+        mock_executor.execute_with_timeout.assert_called_once()
+        command = mock_executor.execute_with_timeout.call_args[0][0]
+        assert "-sender" not in command
+
     def test_show_notification_with_subtitle(self, mock_executor):
         """测试显示带副标题的通知"""
         adapter = MacOSAdapter(mock_executor)
