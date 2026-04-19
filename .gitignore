@@ -176,6 +176,8 @@ test_output/
 tests/*
 !tests/unit/
 tests/unit/*
+!tests/unit/test_*.py
+!tests/unit/conftest.py
 !tests/unit/test_cli.py
 tests/upload_prompts.md
 tmp/

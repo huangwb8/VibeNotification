@@ -1,0 +1,160 @@
+from unittest.mock import Mock
+import io
+import json
+import sys
+
+from vibe_notification.core import VibeNotifier
+from vibe_notification.models import NotificationConfig, NotificationEvent
+
+
+def test_process_event_skips_non_terminal_event_when_detection_enabled():
+    """默认只在会话结束时通知，中间事件应跳过。"""
+    config = NotificationConfig(
+        enable_sound=True,
+        enable_notification=True,
+        detect_conversation_end=True,
+    )
+    notifier = VibeNotifier(config)
+    notifier.notification_builder = Mock(
+        build_notification_content=Mock(
+            return_value={
+                "title": "Demo",
+                "message": "Reply finished!",
+                "level": "INFO",
+                "subtitle": "IDE: Codex",
+            }
+        )
+    )
+    notifier.notifier_manager = Mock()
+
+    event = NotificationEvent(
+        type="assistant-message",
+        agent="codex",
+        message="working",
+        summary="",
+        timestamp="2026-03-21T00:00:00",
+        conversation_end=False,
+        is_last_turn=False,
+    )
+
+    notifier.process_event(event)
+
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
+
+
+def test_process_event_allows_non_terminal_event_when_detection_disabled():
+    """关闭结束检测后，允许按旧行为发送通知。"""
+    config = NotificationConfig(
+        enable_sound=True,
+        enable_notification=True,
+        detect_conversation_end=False,
+    )
+    notifier = VibeNotifier(config)
+    notifier.notification_builder = Mock(
+        build_notification_content=Mock(
+            return_value={
+                "title": "Demo",
+                "message": "Reply finished!",
+                "level": "INFO",
+                "subtitle": "IDE: Codex",
+            }
+        )
+    )
+    notifier.notifier_manager = Mock()
+
+    event = NotificationEvent(
+        type="assistant-message",
+        agent="codex",
+        message="working",
+        summary="",
+        timestamp="2026-03-21T00:00:00",
+        conversation_end=False,
+        is_last_turn=False,
+    )
+
+    notifier.process_event(event)
+
+    notifier.notification_builder.build_notification_content.assert_called_once_with(event)
+    notifier.notifier_manager.send_notifications.assert_called_once()
+
+
+def test_run_skips_codex_stop_hook_payload_from_stdin(monkeypatch):
+    """Codex Stop hook 与 notify 同时存在时，不应提前发送第一条通知。"""
+    event = {
+        "hook_event_name": "Stop",
+        "cwd": "/tmp/project",
+        "model": "gpt-5-codex",
+        "permission_mode": "default",
+        "last_assistant_message": "Working on it",
+        "session_id": "session-1",
+        "stop_hook_active": False,
+        "transcript_path": None,
+    }
+    monkeypatch.setattr(sys, "argv", ["python", "-m", "vibe_notification"])
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    import vibe_notification.parsers._stdin as _stdin_mod
+    monkeypatch.setattr(_stdin_mod, "_cache", _stdin_mod._UNREAD)
+
+    notifier = VibeNotifier(
+        NotificationConfig(
+            enable_sound=True,
+            enable_notification=True,
+            detect_conversation_end=True,
+        )
+    )
+    notifier.notification_builder = Mock(
+        build_notification_content=Mock(
+            return_value={
+                "title": "Demo",
+                "message": "Reply finished!",
+                "level": "INFO",
+                "subtitle": "IDE: Codex",
+            }
+        )
+    )
+    notifier.notifier_manager = Mock()
+
+    notifier.run()
+
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
+
+
+def test_run_skips_codex_acknowledgement_turn_complete_payload(monkeypatch):
+    """Codex 刚接到用户消息时的确认语，不应触发通知。"""
+    event = {
+        "type": "agent-turn-complete",
+        "thread-id": "thread-1",
+        "turn-id": "turn-1",
+        "cwd": "/tmp/project",
+        "client": "codex-tui",
+        "input-messages": ["please fix this bug"],
+        "last-assistant-message": "Sure, I will inspect the repository first.",
+    }
+    monkeypatch.setattr(sys, "argv", ["python", "-m", "vibe_notification", json.dumps(event)])
+
+    notifier = VibeNotifier(
+        NotificationConfig(
+            enable_sound=True,
+            enable_notification=True,
+            detect_conversation_end=True,
+        )
+    )
+    notifier.notification_builder = Mock(
+        build_notification_content=Mock(
+            return_value={
+                "title": "Demo",
+                "message": "Reply finished!",
+                "level": "INFO",
+                "subtitle": "IDE: Codex",
+            }
+        )
+    )
+    notifier.notifier_manager = Mock()
+
+    notifier.run()
+
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
