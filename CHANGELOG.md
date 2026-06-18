@@ -5,6 +5,21 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.21] - 2026-06-18
+
+### 修复
+- 修复 Claude Code 新版本下 Stop 钩子被高频触发导致通知泛滥的问题
+- Claude Code 新版在 agentic loop 中（工具调用、子代理）也会触发 Stop 钩子，
+  不再仅限于主代理回复结束。新增基于 `transcript_path` 真实状态的中间停止判定：
+  - 最后一条 assistant 消息仍在调用工具（content 含 `tool_use`）→ 中间停止，跳过通知
+  - `stop_hook_active=True` 的 Stop 链重复触发 → 跳过，避免重复通知
+  - 无 `transcript_path` 或读取失败 → 保守通知，避免漏报
+- 现在仅在「主代理一次完整回复真正结束」时通知一次，满足「某个回复结束就通知」的需求
+
+### 测试
+- 新增回归测试覆盖中间停止、真正回复结束、transcript 尾部元数据行跳过、
+  `stop_hook_active` 去重、transcript 缺失/损坏回退等场景
+
 ## [1.0.5] - 2026-03-21
 
 ### 修复

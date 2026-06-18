@@ -9,7 +9,7 @@ python -m vibe_notification --version
 - 升级
 
 ```
-version=1.0.19
+version=1.0.21
 pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 git-commit skill创建commit信息；通过git-publish-release skill 发布release。推送新版本到pypi。然后，在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装最新版本。
 ```
 
@@ -41,6 +41,10 @@ Codex 完成一轮回复，也不会收到通知。是本机codex的config.toml�
 ```
 
 # 日常
+
+---
+
+最近Claude Code更新了，我感觉提示音又异常了。 目前，Claude Code会出现频繁、甚至是连续不断的提示。你赶紧修复。  使用 awesome-code skill 辅助规划、优化。所有问题都要解决。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。不要破坏其它功能。要保证最终成品能正常、稳定、高效地工作。 注意：我要的是“某个回复结束就通知”，不是 SessionEnd。
 
 ---
 
