@@ -112,6 +112,14 @@ class VibeNotifier:
         self.logger.info(f"处理事件: {event.agent} - {event.type} - 会话结束: {event.conversation_end}")
 
         try:
+            if event.metadata and event.metadata.get("suppress_notification") is True:
+                self.logger.info(
+                    "跳过显式忽略事件通知: %s - %s",
+                    event.agent,
+                    event.type,
+                )
+                return
+
             if self.config.detect_conversation_end and not event.conversation_end:
                 self.logger.info(
                     "跳过非结束事件通知: %s - %s",

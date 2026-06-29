@@ -14,7 +14,18 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 
 from ._stdin import get_stdin_json
 
-CLAUDE_HOOK_EVENTS = {"stop", "sessionend", "subagentstop", "posttooluse", "pretooluse", "toolerror"}
+CLAUDE_HOOK_EVENTS = {
+    "stop",
+    "sessionend",
+    "subagentstop",
+    "posttooluse",
+    "pretooluse",
+    "toolerror",
+    "notification",
+    "userpromptsubmit",
+    "precompact",
+    "sessionstart",
+}
 CODEX_HOOK_EVENTS = {"sessionstart", "userpromptsubmit", "pretooluse", "posttooluse", "stop"}
 CODEX_NOTIFY_EVENT_TYPES = {"agent-turn-complete", "turn-completed", "session-end"}
 CODEX_APP_SERVER_METHODS = {"turn/completed"}

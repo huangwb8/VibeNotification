@@ -3,8 +3,19 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from vibe_notification.parsers import ClaudeCodeParser
 from vibe_notification.parsers._stdin import get_stdin_json
+
+
+@pytest.fixture(autouse=True)
+def _isolate_claude_stop_dedupe_state(monkeypatch, tmp_path):
+    """测试中不要写入真实用户目录下的 Stop 去重状态。"""
+    monkeypatch.setattr(
+        "vibe_notification.parsers.claude_code.CLAUDE_STOP_DEDUPE_STATE_PATH",
+        tmp_path / "claude-stop-dedupe.json",
+    )
 
 
 def _reset_stdin_cache():
@@ -64,6 +75,26 @@ def test_subagent_stop_event_is_not_main_reply_complete(monkeypatch):
     assert event.conversation_end is False
     assert event.is_last_turn is False
     assert event.metadata.get("event") == "SubagentStop"
+
+
+def test_notification_hook_is_not_reply_complete(monkeypatch):
+    """Claude Notification hook 是提示/权限/空闲类事件，不是回复完成。"""
+    data = {
+        "hook_event_name": "Notification",
+        "message": "Claude needs your permission",
+        "notification_type": "permission_request",
+    }
+    monkeypatch.delenv("CLAUDE_HOOK_EVENT", raising=False)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(data)))
+    _reset_stdin_cache()
+
+    parser = ClaudeCodeParser()
+    event = parser.parse()
+
+    assert event is not None
+    assert event.type == "notification"
+    assert event.conversation_end is False
+    assert event.metadata.get("suppress_notification") is True
 
 
 def test_claude_stdin_session_end_is_not_reply_complete(monkeypatch):
@@ -306,3 +337,102 @@ def test_stop_with_missing_transcript_file_falls_back_to_notify(monkeypatch, tmp
 
     assert event is not None
     assert event.conversation_end is True
+
+
+def test_duplicate_stop_for_same_transcript_reply_is_suppressed(monkeypatch, tmp_path):
+    """同一条最终 assistant 回复触发多次 Stop 时，只第一次应通知。"""
+    state_path = tmp_path / "claude-stop-dedupe.json"
+    monkeypatch.setattr(
+        "vibe_notification.parsers.claude_code.CLAUDE_STOP_DEDUPE_STATE_PATH",
+        state_path,
+        raising=False,
+    )
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [
+        _assistant_row([{"type": "text", "text": "已完成。"}]),
+    ])
+    payload = {
+        "hook_event_name": "Stop",
+        "session_id": "s1",
+        "transcript_path": str(transcript),
+        "cwd": str(tmp_path),
+        "stop_hook_active": False,
+        "last_assistant_message": "已完成。",
+    }
+
+    _feed_stop_stdin(monkeypatch, payload)
+    first = ClaudeCodeParser().parse()
+    _feed_stop_stdin(monkeypatch, payload)
+    second = ClaudeCodeParser().parse()
+
+    assert first is not None
+    assert first.conversation_end is True
+    assert second is not None
+    assert second.type == "stop-duplicate"
+    assert second.conversation_end is False
+
+
+def test_stop_with_same_message_but_new_transcript_line_notifies(monkeypatch, tmp_path):
+    """相同文本的新回复不应被误杀；transcript 行号变化代表新的一轮输出。"""
+    state_path = tmp_path / "claude-stop-dedupe.json"
+    monkeypatch.setattr(
+        "vibe_notification.parsers.claude_code.CLAUDE_STOP_DEDUPE_STATE_PATH",
+        state_path,
+        raising=False,
+    )
+    transcript = tmp_path / "t.jsonl"
+    payload = {
+        "hook_event_name": "Stop",
+        "session_id": "s1",
+        "transcript_path": str(transcript),
+        "cwd": str(tmp_path),
+        "stop_hook_active": False,
+        "last_assistant_message": "Done",
+    }
+
+    _write_transcript(transcript, [
+        _assistant_row([{"type": "text", "text": "Done"}]),
+    ])
+    _feed_stop_stdin(monkeypatch, payload)
+    first = ClaudeCodeParser().parse()
+
+    _write_transcript(transcript, [
+        _assistant_row([{"type": "text", "text": "Done"}]),
+        {"type": "user", "message": {"role": "user", "content": "again"}},
+        _assistant_row([{"type": "text", "text": "Done"}]),
+    ])
+    _feed_stop_stdin(monkeypatch, payload)
+    second = ClaudeCodeParser().parse()
+
+    assert first is not None
+    assert first.conversation_end is True
+    assert second is not None
+    assert second.conversation_end is True
+
+
+def test_duplicate_stop_without_transcript_uses_last_assistant_message(monkeypatch, tmp_path):
+    """新版 Stop payload 提供 last_assistant_message；无 transcript 时也用它做短期去重。"""
+    state_path = tmp_path / "claude-stop-dedupe.json"
+    monkeypatch.setattr(
+        "vibe_notification.parsers.claude_code.CLAUDE_STOP_DEDUPE_STATE_PATH",
+        state_path,
+        raising=False,
+    )
+    payload = {
+        "hook_event_name": "Stop",
+        "session_id": "s1",
+        "cwd": str(tmp_path),
+        "stop_hook_active": False,
+        "last_assistant_message": "Finished one reply.",
+    }
+
+    _feed_stop_stdin(monkeypatch, payload)
+    first = ClaudeCodeParser().parse()
+    _feed_stop_stdin(monkeypatch, payload)
+    second = ClaudeCodeParser().parse()
+
+    assert first is not None
+    assert first.conversation_end is True
+    assert second is not None
+    assert second.type == "stop-duplicate"
+    assert second.conversation_end is False

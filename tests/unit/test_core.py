@@ -79,6 +79,34 @@ def test_process_event_allows_non_terminal_event_when_detection_disabled():
     notifier.notifier_manager.send_notifications.assert_called_once()
 
 
+def test_process_event_skips_explicitly_suppressed_event_when_detection_disabled():
+    """明确标记为忽略的 hook 事件即使关闭结束检测也不应通知。"""
+    config = NotificationConfig(
+        enable_sound=True,
+        enable_notification=True,
+        detect_conversation_end=False,
+    )
+    notifier = VibeNotifier(config)
+    notifier.notification_builder = Mock()
+    notifier.notifier_manager = Mock()
+
+    event = NotificationEvent(
+        type="stop-duplicate",
+        agent="claude-code",
+        message="Claude 回复已处理",
+        summary="Claude Code 重复 Stop（忽略通知）",
+        timestamp="2026-03-21T00:00:00",
+        conversation_end=False,
+        is_last_turn=False,
+        metadata={"suppress_notification": True},
+    )
+
+    notifier.process_event(event)
+
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
+
+
 def test_run_skips_codex_stop_hook_payload_from_stdin(monkeypatch):
     """Codex Stop hook 与 notify 同时存在时，不应提前发送第一条通知。"""
     event = {
