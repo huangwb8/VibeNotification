@@ -25,9 +25,14 @@ class CodexParser(BaseParser):
 
     CODEX_HOOK_EVENT_TYPES = {
         "sessionstart": "session-start",
+        "subagentstart": "subagent-start",
         "userpromptsubmit": "user-prompt-submit",
         "pretooluse": "pre-tool-use",
+        "permissionrequest": "permission-request",
         "posttooluse": "post-tool-use",
+        "precompact": "pre-compact",
+        "postcompact": "post-compact",
+        "subagentstop": "subagent-stop",
         "stop": "stop-hook",
     }
 
@@ -198,6 +203,10 @@ class CodexParser(BaseParser):
             return "Codex 工具调用前"
         if hook_event_name == "posttooluse":
             return "Codex 工具调用完成"
+        if hook_event_name == "subagentstart":
+            return "Codex 子代理已启动"
+        if hook_event_name == "subagentstop":
+            return "Codex 子代理已完成"
         if hook_event_name == "stop":
             return "Codex Stop hook 已触发"
 

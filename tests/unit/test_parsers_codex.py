@@ -96,6 +96,63 @@ def test_codex_parser_marks_official_agent_turn_complete_as_terminal(monkeypatch
     assert parsed.is_last_turn is True
 
 
+def test_detect_conversation_end_ignores_codex_subagent_turn_complete():
+    """子代理 turn 完成不是主回复完成，不应触发用户通知。"""
+    event = {
+        "type": "agent-turn-complete",
+        "thread-id": "thread-1",
+        "turn-id": "turn-sub-1",
+        "client": "codex-tui",
+        "agent": "codex-subagent",
+        "subagent_id": "sub-1",
+        "last-assistant-message": "Done and verified.",
+    }
+
+    assert detect_conversation_end(event) is False
+
+
+def test_codex_parser_marks_subagent_turn_complete_as_suppressed(monkeypatch):
+    """Codex 子代理完成事件应被解析但显式标记为非终态。"""
+    event = {
+        "type": "agent-turn-complete",
+        "thread-id": "thread-1",
+        "turn-id": "turn-sub-1",
+        "client": "codex-app-server",
+        "agent": "task-agent",
+        "sub_agent": {"id": "sub-1", "name": "code-reviewer"},
+        "last-assistant-message": "Implemented the requested fix.",
+    }
+    monkeypatch.setattr(sys, "argv", ["python", "-m", "vibe_notification", json.dumps(event)])
+
+    parsed = CodexParser().parse()
+
+    assert parsed is not None
+    assert parsed.conversation_end is False
+    assert parsed.is_last_turn is False
+
+
+def test_codex_parser_suppresses_official_subagent_stop_hook(monkeypatch):
+    """官方 Codex SubagentStop hook 是子代理生命周期事件，应静默跳过。"""
+    event = {
+        "hook_event_name": "SubagentStop",
+        "cwd": "/tmp/project",
+        "model": "gpt-5-codex",
+        "agent_id": "agent-1",
+        "agent_type": "code-reviewer",
+        "agent_transcript_path": "/tmp/subagent.jsonl",
+        "session_id": "session-1",
+    }
+    monkeypatch.setattr(sys, "argv", ["python", "-m", "vibe_notification", json.dumps(event)])
+
+    parsed = CodexParser().parse()
+
+    assert parsed is not None
+    assert parsed.type == "subagent-stop"
+    assert parsed.agent == "codex-hook"
+    assert parsed.conversation_end is False
+    assert parsed.is_last_turn is False
+
+
 def test_detect_conversation_end_ignores_codex_turn_complete_without_final_message():
     """缺少最终 assistant 文本时，不应仅凭 turn-complete 就通知。"""
     event = {

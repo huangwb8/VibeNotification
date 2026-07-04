@@ -28,7 +28,18 @@ CODEX_NOTIFY_EVENT_TYPES = {
 
 CODEX_APP_SERVER_METHODS = {"turn/completed"}
 
-CODEX_HOOK_EVENT_NAMES = {"sessionstart", "userpromptsubmit", "pretooluse", "posttooluse", "stop"}
+CODEX_HOOK_EVENT_NAMES = {
+    "sessionstart",
+    "subagentstart",
+    "pretooluse",
+    "permissionrequest",
+    "posttooluse",
+    "precompact",
+    "postcompact",
+    "userpromptsubmit",
+    "subagentstop",
+    "stop",
+}
 
 CODEX_TERMINAL_PHASES = {"final-answer", "final_answer"}
 
@@ -150,6 +161,47 @@ CODEX_TERMINAL_MESSAGE_PATTERNS = (
 
 _LEADING_PUNCTUATION = " \t\r\n,.;:!?，。；：！？-"
 
+SUBAGENT_VALUE_MARKERS = (
+    "subagent",
+    "sub-agent",
+    "sub_agent",
+    "task-agent",
+    "task_agent",
+)
+
+SUBAGENT_ID_KEYS = {
+    "subagent",
+    "sub_agent",
+    "subagent_id",
+    "sub_agent_id",
+    "subagent_name",
+    "sub_agent_name",
+    "subagent_session_id",
+    "sub_agent_session_id",
+    "agent_id",
+    "agent_transcript_path",
+}
+
+SUBAGENT_BOOL_KEYS = {
+    "is_subagent",
+    "isSubagent",
+    "is_sidechain",
+    "isSidechain",
+    "sidechain",
+}
+
+SUBAGENT_STRING_KEYS = {
+    "agent",
+    "role",
+    "source",
+    "event",
+    "hook_event_name",
+    "hookEventName",
+    "name",
+    "kind",
+    "agent_type",
+}
+
 
 def _normalize_event_name(value: Any) -> str:
     """标准化事件名，统一比较格式。"""
@@ -167,6 +219,39 @@ def _iter_nested_dicts(value: Any):
     elif isinstance(value, list):
         for child in value:
             yield from _iter_nested_dicts(child)
+
+
+def _value_mentions_subagent(value: str) -> bool:
+    """判断结构化字段值是否明确表示子代理。"""
+    normalized = value.replace("_", "-").strip().lower()
+    return any(marker.replace("_", "-") in normalized for marker in SUBAGENT_VALUE_MARKERS)
+
+
+def _contains_subagent_signal(event: Dict[str, Any]) -> bool:
+    """检测负载是否明确来自子代理，而不是主代理最终回复。"""
+    for payload in _iter_nested_dicts(event):
+        for key in SUBAGENT_BOOL_KEYS:
+            if payload.get(key) is True:
+                return True
+
+        for key in SUBAGENT_ID_KEYS:
+            value = payload.get(key)
+            if isinstance(value, bool):
+                if value is True:
+                    return True
+                continue
+            if isinstance(value, dict):
+                if value:
+                    return True
+            elif isinstance(value, (str, int, float)) and str(value).strip():
+                return True
+
+        for key in SUBAGENT_STRING_KEYS:
+            value = payload.get(key)
+            if isinstance(value, str) and _value_mentions_subagent(value):
+                return True
+
+    return False
 
 
 def _looks_like_codex_payload(event: Dict[str, Any]) -> bool:
@@ -365,6 +450,9 @@ def _codex_structured_terminal_signal(event: Dict[str, Any]) -> bool | None:
 def _detect_codex_conversation_end(event: Dict[str, Any]) -> bool:
     """基于 Codex 官方事件形状判断是否为真实 turn 结束。"""
     if _contains_codex_hook_event(event):
+        return False
+
+    if _contains_subagent_signal(event):
         return False
 
     event_type = _normalize_event_name(event.get("type") or event.get("event"))

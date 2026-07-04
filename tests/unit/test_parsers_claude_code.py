@@ -243,6 +243,28 @@ def test_stop_with_transcript_showing_pure_text_notifies(monkeypatch, tmp_path):
     assert event.is_last_turn is True
 
 
+def test_stop_with_transcript_showing_sidechain_assistant_is_skipped(monkeypatch, tmp_path):
+    """Stop 指向子代理 sidechain 的最终文本时，不应当作主回复完成。"""
+    transcript = tmp_path / "t.jsonl"
+    sidechain = _assistant_row([{"type": "text", "text": "Subagent finished."}])
+    sidechain["isSidechain"] = True
+    _write_transcript(transcript, [sidechain])
+    _feed_stop_stdin(monkeypatch, {
+        "hook_event_name": "Stop",
+        "session_id": "s1",
+        "transcript_path": str(transcript),
+        "cwd": str(tmp_path),
+        "stop_hook_active": False,
+    })
+
+    event = ClaudeCodeParser().parse()
+
+    assert event is not None
+    assert event.conversation_end is False
+    assert event.is_last_turn is False
+    assert event.metadata.get("suppress_notification") is True
+
+
 def test_stop_skips_metadata_lines_to_find_last_assistant(monkeypatch, tmp_path):
     """transcript 尾部混有 ai-title/attachment 等元数据行，应跳过找到真实 assistant。
 

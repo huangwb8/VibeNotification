@@ -136,12 +136,15 @@ class ClaudeCodeParser(BaseParser):
         不再仅限于「主代理回复结束」。仅凭 hook_event_name=Stop 已无法区分。
 
         通过 transcript 真实状态判定：若最后一条 assistant 消息仍在调用工具
-        （content 含 tool_use），说明 Claude 还会继续，并非真正的回复结束。
+        （content 含 tool_use）或来自子代理 sidechain，说明这不是主回复结束。
 
         无 transcript 或读取失败时返回 False（保守通知，避免漏报）。
         """
         if not isinstance(stdin_json, dict):
             return False
+
+        if self._payload_indicates_subagent(stdin_json):
+            return True
 
         # stop_hook_active=True：Stop 链重复触发（上次 Stop 导致 Claude 继续），跳过避免重复通知
         if stdin_json.get("stop_hook_active") is True:
@@ -155,7 +158,10 @@ class ClaudeCodeParser(BaseParser):
         if last_assistant is None:
             return False
 
-        return self._assistant_message_has_tool_use(last_assistant)
+        return (
+            self._assistant_message_has_tool_use(last_assistant)
+            or self._assistant_message_is_sidechain(last_assistant)
+        )
 
     def _read_last_assistant_message(self, transcript_path: Path) -> Optional[Dict[str, Any]]:
         """从 transcript 读取最后一条真实 assistant 消息。"""
@@ -216,6 +222,54 @@ class ClaudeCodeParser(BaseParser):
             isinstance(item, dict) and item.get("type") == "tool_use"
             for item in content
         )
+
+    @staticmethod
+    def _assistant_message_is_sidechain(assistant_obj: Dict[str, Any]) -> bool:
+        """判断 assistant 行是否来自 Claude Code 子代理 sidechain。"""
+        return any(
+            assistant_obj.get(key) is True
+            for key in ("isSidechain", "is_sidechain", "sidechain", "isSubagent", "is_subagent")
+        )
+
+    @classmethod
+    def _payload_indicates_subagent(cls, value: Any) -> bool:
+        """递归识别 Stop stdin 中明确的子代理标记。"""
+        if isinstance(value, dict):
+            for key in ("isSubagent", "is_subagent", "isSidechain", "is_sidechain", "sidechain"):
+                if value.get(key) is True:
+                    return True
+
+            for key in (
+                "subagent",
+                "sub_agent",
+                "subagent_id",
+                "sub_agent_id",
+                "subagent_name",
+                "sub_agent_name",
+            ):
+                marker = value.get(key)
+                if isinstance(marker, bool):
+                    if marker is True:
+                        return True
+                    continue
+                if isinstance(marker, dict) and marker:
+                    return True
+                if isinstance(marker, (str, int, float)) and str(marker).strip():
+                    return True
+
+            for key in ("agent", "role", "source", "event", "hook_event_name", "hookEventName"):
+                marker = value.get(key)
+                if isinstance(marker, str):
+                    normalized = marker.replace("_", "-").strip().lower()
+                    if "subagent" in normalized or "sub-agent" in normalized:
+                        return True
+
+            return any(cls._payload_indicates_subagent(child) for child in value.values())
+
+        if isinstance(value, list):
+            return any(cls._payload_indicates_subagent(child) for child in value)
+
+        return False
 
     @staticmethod
     def _stable_digest(value: Any) -> str:

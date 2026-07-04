@@ -26,7 +26,18 @@ CLAUDE_HOOK_EVENTS = {
     "precompact",
     "sessionstart",
 }
-CODEX_HOOK_EVENTS = {"sessionstart", "userpromptsubmit", "pretooluse", "posttooluse", "stop"}
+CODEX_HOOK_EVENTS = {
+    "sessionstart",
+    "subagentstart",
+    "pretooluse",
+    "permissionrequest",
+    "posttooluse",
+    "precompact",
+    "postcompact",
+    "userpromptsubmit",
+    "subagentstop",
+    "stop",
+}
 CODEX_NOTIFY_EVENT_TYPES = {"agent-turn-complete", "turn-completed", "session-end"}
 CODEX_APP_SERVER_METHODS = {"turn/completed"}
 

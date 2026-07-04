@@ -60,3 +60,22 @@ def test_detect_parser_type_detects_codex_stop_from_stdin(monkeypatch):
     monkeypatch.setattr(_stdin_mod, "_cache", _stdin_mod._UNREAD)
 
     assert detect_parser_type() == "codex"
+
+
+def test_detect_parser_type_detects_codex_subagent_stop_from_stdin(monkeypatch):
+    event = {
+        "hook_event_name": "SubagentStop",
+        "cwd": "/tmp/project",
+        "model": "gpt-5-codex",
+        "agent_id": "agent-1",
+        "agent_type": "code-reviewer",
+        "agent_transcript_path": "/tmp/subagent.jsonl",
+        "session_id": "session-1",
+    }
+    monkeypatch.setattr(sys, "argv", ["python", "-m", "vibe_notification"])
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    import vibe_notification.parsers._stdin as _stdin_mod
+    monkeypatch.setattr(_stdin_mod, "_cache", _stdin_mod._UNREAD)
+
+    assert detect_parser_type() == "codex"
