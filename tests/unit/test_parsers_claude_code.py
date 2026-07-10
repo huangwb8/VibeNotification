@@ -220,6 +220,54 @@ def test_stop_with_transcript_showing_tool_use_is_intermediate(monkeypatch, tmp_
     assert event.is_last_turn is False
 
 
+def test_stop_prefers_official_last_message_over_stale_tool_transcript(
+    monkeypatch,
+    tmp_path,
+):
+    """新版 Stop 的最终文本优先于可能异步滞后的 transcript。"""
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [
+        _assistant_row([
+            {"type": "tool_use", "name": "Read", "input": {}},
+        ]),
+    ])
+    _feed_stop_stdin(monkeypatch, {
+        "hook_event_name": "Stop",
+        "session_id": "s1",
+        "transcript_path": str(transcript),
+        "stop_hook_active": False,
+        "last_assistant_message": "最终回复已经完成。",
+    })
+
+    event = ClaudeCodeParser().parse()
+
+    assert event is not None
+    assert event.type == "agent-turn-complete"
+    assert event.conversation_end is True
+
+
+@pytest.mark.parametrize("pending_field", ["background_tasks", "session_crons"])
+def test_stop_with_pending_background_work_is_suppressed(
+    monkeypatch,
+    pending_field,
+):
+    """后台任务仍会唤醒 turn 时，Stop 只是暂时空闲。"""
+    _feed_stop_stdin(monkeypatch, {
+        "hook_event_name": "Stop",
+        "session_id": "s1",
+        "stop_hook_active": False,
+        "last_assistant_message": "当前阶段完成。",
+        pending_field: [{"id": "pending-1"}],
+    })
+
+    event = ClaudeCodeParser().parse()
+
+    assert event is not None
+    assert event.type == "stop-intermediate"
+    assert event.conversation_end is False
+    assert event.metadata.get("suppress_notification") is True
+
+
 def test_stop_with_transcript_showing_pure_text_notifies(monkeypatch, tmp_path):
     """Stop 时 transcript 最后一条 assistant 为纯文本（无 tool_use）→ 真正回复结束，应通知。"""
     transcript = tmp_path / "t.jsonl"
@@ -384,6 +432,76 @@ def test_duplicate_stop_for_same_transcript_reply_is_suppressed(monkeypatch, tmp
 
     _feed_stop_stdin(monkeypatch, payload)
     first = ClaudeCodeParser().parse()
+    _feed_stop_stdin(monkeypatch, payload)
+    second = ClaudeCodeParser().parse()
+
+    assert first is not None
+    assert first.conversation_end is True
+    assert second is not None
+    assert second.type == "stop-duplicate"
+    assert second.conversation_end is False
+
+
+def test_duplicate_stop_for_same_assistant_message_id_is_suppressed_when_transcript_grows(
+    monkeypatch,
+    tmp_path,
+):
+    """同一 Claude 消息的增量 transcript 快照只能通知一次。"""
+    transcript = tmp_path / "t.jsonl"
+    first_snapshot = _assistant_row([{"type": "text", "text": "已完成。"}])
+    first_snapshot["message"]["id"] = "msg-1"
+    second_snapshot = _assistant_row(
+        [{"type": "text", "text": "已完成，测试通过。"}]
+    )
+    second_snapshot["message"]["id"] = "msg-1"
+    payload = {
+        "hook_event_name": "Stop",
+        "session_id": "s1",
+        "transcript_path": str(transcript),
+        "cwd": str(tmp_path),
+        "stop_hook_active": False,
+    }
+
+    _write_transcript(transcript, [first_snapshot])
+    _feed_stop_stdin(monkeypatch, payload)
+    first = ClaudeCodeParser().parse()
+
+    _write_transcript(transcript, [first_snapshot, second_snapshot])
+    _feed_stop_stdin(monkeypatch, payload)
+    second = ClaudeCodeParser().parse()
+
+    assert first is not None
+    assert first.type == "agent-turn-complete"
+    assert first.conversation_end is True
+    assert second is not None
+    assert second.type == "stop-duplicate"
+    assert second.conversation_end is False
+    assert second.is_last_turn is False
+    assert second.metadata.get("suppress_notification") is True
+
+
+def test_assistant_message_id_remains_deduplicated_after_short_fallback_ttl(
+    monkeypatch,
+    tmp_path,
+):
+    """稳定 message.id 使用长幂等窗口，超过文本兜底 60 秒仍不重放。"""
+    transcript = tmp_path / "t.jsonl"
+    snapshot = _assistant_row([{"type": "text", "text": "已完成。"}])
+    snapshot["message"]["id"] = "msg-stable"
+    _write_transcript(transcript, [snapshot])
+    payload = {
+        "hook_event_name": "Stop",
+        "session_id": "s1",
+        "transcript_path": str(transcript),
+        "cwd": str(tmp_path),
+        "stop_hook_active": False,
+    }
+
+    monkeypatch.setattr("vibe_notification.dedupe.time.time", lambda: 1_000.0)
+    _feed_stop_stdin(monkeypatch, payload)
+    first = ClaudeCodeParser().parse()
+
+    monkeypatch.setattr("vibe_notification.dedupe.time.time", lambda: 1_061.0)
     _feed_stop_stdin(monkeypatch, payload)
     second = ClaudeCodeParser().parse()
 

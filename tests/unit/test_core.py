@@ -3,8 +3,19 @@ import io
 import json
 import sys
 
+import pytest
+
 from vibe_notification.core import VibeNotifier
 from vibe_notification.models import NotificationConfig, NotificationEvent
+
+
+@pytest.fixture(autouse=True)
+def _isolate_codex_turn_dedupe_state(monkeypatch, tmp_path):
+    """核心测试不读写真实用户的 Codex turn 幂等状态。"""
+    monkeypatch.setattr(
+        "vibe_notification.parsers.codex.CODEX_TURN_DEDUPE_STATE_PATH",
+        tmp_path / "codex-turn-dedupe.json",
+    )
 
 
 def test_process_event_skips_non_terminal_event_when_detection_enabled():
@@ -150,8 +161,88 @@ def test_run_skips_codex_stop_hook_payload_from_stdin(monkeypatch):
     notifier.notifier_manager.send_notifications.assert_not_called()
 
 
-def test_run_skips_codex_acknowledgement_turn_complete_payload(monkeypatch):
-    """Codex 刚接到用户消息时的确认语，不应触发通知。"""
+def test_run_never_notifies_for_codex_user_prompt_submit_when_detection_disabled(
+    monkeypatch,
+):
+    """用户输入类 hook 必须强制静默，不受结束检测配置影响。"""
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "cwd": "/tmp/project",
+        "model": "gpt-5-codex",
+        "prompt": "new user input",
+        "session_id": "session-1",
+    }
+    monkeypatch.setattr(
+        sys, "argv", ["python", "-m", "vibe_notification", json.dumps(event)]
+    )
+
+    notifier = VibeNotifier(
+        NotificationConfig(
+            enable_sound=True,
+            enable_notification=True,
+            detect_conversation_end=False,
+        )
+    )
+    notifier.notification_builder = Mock()
+    notifier.notifier_manager = Mock()
+
+    notifier.run()
+
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
+
+
+def test_run_skips_unknown_event_instead_of_sending_test_notification():
+    """协议新增事件未被识别时应 fail-closed，不能伪造成功通知。"""
+    notifier = VibeNotifier(
+        NotificationConfig(
+            enable_sound=True,
+            enable_notification=True,
+            detect_conversation_end=False,
+        )
+    )
+    notifier.parser_manager = Mock()
+    notifier.parser_manager.get_available_parser.return_value = None
+    notifier.notification_builder = Mock()
+    notifier.notifier_manager = Mock()
+
+    notifier.run()
+
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
+
+
+def test_run_skips_unknown_claude_hook_even_with_terminal_payload(monkeypatch):
+    """未来新增 hook 未适配前必须 fail-closed，不能落入通用终态解析。"""
+    event = {
+        "hook_event_name": "FutureHook",
+        "conversation_end": True,
+        "message": "future lifecycle event",
+    }
+    monkeypatch.setenv("CLAUDE_HOOK_EVENT", "FutureHook")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    import vibe_notification.parsers._stdin as _stdin_mod
+    monkeypatch.setattr(_stdin_mod, "_cache", _stdin_mod._UNREAD)
+
+    notifier = VibeNotifier(
+        NotificationConfig(
+            enable_sound=True,
+            enable_notification=True,
+            detect_conversation_end=False,
+        )
+    )
+    notifier.notification_builder = Mock()
+    notifier.notifier_manager = Mock()
+
+    notifier.run()
+
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
+
+
+def test_run_notifies_for_official_codex_turn_complete_regardless_of_wording(monkeypatch):
+    """官方 turn 完成后的短回复仍应通知；输入 hook 由独立路径静默。"""
     event = {
         "type": "agent-turn-complete",
         "thread-id": "thread-1",
@@ -184,8 +275,8 @@ def test_run_skips_codex_acknowledgement_turn_complete_payload(monkeypatch):
 
     notifier.run()
 
-    notifier.notification_builder.build_notification_content.assert_not_called()
-    notifier.notifier_manager.send_notifications.assert_not_called()
+    notifier.notification_builder.build_notification_content.assert_called_once()
+    notifier.notifier_manager.send_notifications.assert_called_once()
 
 
 def test_run_skips_claude_session_end_hook(monkeypatch):

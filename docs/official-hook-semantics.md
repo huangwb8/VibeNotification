@@ -1,6 +1,6 @@
 # Official Hook Semantics for Reply Completion
 
-查证日期：2026-07-04
+查证日期：2026-07-11
 
 本文记录 VibeNotification 对 Claude Code 与 Codex “回复结束通知”的判定依据。目标是明确：通知应绑定到“主代理某一轮回复结束”，而不是整个会话退出，也不是子代理完成。
 
@@ -30,6 +30,8 @@
 对本项目的含义：
 
 - Codex `notify` 的 `agent-turn-complete` 可以作为主回复完成候选事件。
+- 当 `agent-turn-complete` 带有官方 `thread-id`、`turn-id` 和 assistant 文本时，
+  直接按 turn 完成语义处理，不根据回复长短或措辞猜测。
 - Codex hook payload 中的 `SubagentStop` 必须被识别为非主回复完成。
 - 如果误把 VibeNotification 接到 Codex hooks，`Stop` 也要谨慎处理；hook 事件不等同于 `notify` 的最终通知语义。
 
@@ -43,6 +45,8 @@
 
 - `Stop` 在主 Claude Code agent 完成响应时运行；用户中断导致的停止不触发 `Stop`，API 错误触发 `StopFailure`。
 - `Stop` 输入包含 `stop_hook_active`、`last_assistant_message`、`background_tasks`、`session_crons` 等字段。
+- 通知与朗读类 Stop hook 应直接使用 `last_assistant_message`；transcript 可能异步写入，
+  只适合作为旧版本缺少该字段时的兼容回退。
 - `SubagentStop` 在 Claude Code 子代理完成响应时运行。
 - `SubagentStop` 输入包含 `stop_hook_active`、`agent_id`、`agent_type`、`agent_transcript_path`、`last_assistant_message`。其中 `transcript_path` 是主会话 transcript，`agent_transcript_path` 是子代理自己的 transcript。
 - `Stop` 与 `SubagentStop` 可使用类似的 decision control，但语义不同：一个面向主代理停止，一个面向子代理停止。
@@ -51,7 +55,8 @@
 
 - Claude Code 推荐接 `Stop`，因为用户需要的是“某个主回复结束就通知”。
 - `SubagentStop` 必须静默跳过，不能提示用户“任务完成”。
-- 即使事件名是 `Stop`，如果 transcript 或 payload 明确指向 sidechain / subagent，也应视为非主回复完成。
+- 即使事件名是 `Stop`，如果 payload 明确指向 sidechain / subagent，或仍有
+  `background_tasks` / `session_crons`，也应视为非主回复完成。
 - `SessionEnd` 不是本轮回复完成，不应作为默认通知触发点。
 
 ## 实现映射
@@ -64,12 +69,19 @@
 - `vibe_notification/parsers/codex.py`
   - 将 Codex `SubagentStop` 解析为 `subagent-stop`。
   - 该事件保持 `conversation_end=False`，由通知层跳过。
+  - 使用 `thread-id` + `turn-id` 的哈希身份做跨进程幂等，重复 notify 强制静默。
 - `vibe_notification/detectors/conversation.py`
   - 在 Codex 终态判定前先检查子代理信号。
   - 子代理信号包括 `subagent_id`、`sub_agent`、`agent_id`、`agent_type`、`agent_transcript_path`、`isSubagent`、`isSidechain` 等。
 - `vibe_notification/parsers/claude_code.py`
   - `SubagentStop` 明确返回非终态事件。
-  - `Stop` 会检查 `stop_hook_active`、工具调用、sidechain/subagent 标记，避免把中间事件或子代理事件当作主回复完成。
+  - `Stop` 优先使用官方 `last_assistant_message`，并检查 `stop_hook_active`、后台任务、
+    sidechain/subagent 标记；transcript 只在旧负载缺少最终文本时回退使用。
+  - 同一 assistant `message.id` 的增量 transcript 记录共享去重身份。
+  - 稳定 `message.id` 使用长幂等窗口；缺少稳定身份的文本回退仅做短期去重。
+  - 未知 hook 在适配前返回强制静默事件，不落入通用 stdin 终态解析。
+- `vibe_notification/core.py`
+  - 未知事件 fail-closed，绝不伪装成测试成功通知。
 
 ## 回归测试
 
@@ -92,7 +104,7 @@
 python -m pytest tests/
 ```
 
-最近一次验证结果：`181 passed, 2 skipped`。
+最近一次验证结果：`193 passed, 2 skipped`。
 
 ## 维护原则
 

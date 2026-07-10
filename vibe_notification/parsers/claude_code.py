@@ -10,16 +10,15 @@ Claude Code 解析器
 import hashlib
 import json
 import os
-import time
 from collections import deque
-from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .base import BaseParser
 from ._stdin import get_stdin_json
 from .routing import is_claude_context
+from ..dedupe import mark_recent_key
 from ..models import NotificationEvent
 
 # 分析 transcript 时只读尾部窗口，控制内存与耗时
@@ -28,47 +27,7 @@ CLAUDE_STOP_DEDUPE_STATE_PATH = (
     Path.home() / ".config" / "vibe-notification" / "claude-stop-dedupe.json"
 )
 CLAUDE_STOP_DEDUPE_TTL_SECONDS = 60
-CLAUDE_STOP_DEDUPE_LOCK_TIMEOUT_SECONDS = 1.0
-CLAUDE_STOP_DEDUPE_LOCK_STALE_SECONDS = 10.0
-
-
-@contextmanager
-def _claude_stop_state_lock(state_path: Path) -> Iterator[bool]:
-    """用独占 lock 文件保护 Stop 去重状态的读改写。"""
-    lock_path = state_path.with_suffix(f"{state_path.suffix}.lock")
-    deadline = time.monotonic() + CLAUDE_STOP_DEDUPE_LOCK_TIMEOUT_SECONDS
-    fd: Optional[int] = None
-
-    while time.monotonic() < deadline:
-        try:
-            lock_path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, str(os.getpid()).encode("ascii", errors="ignore"))
-            break
-        except FileExistsError:
-            try:
-                age = time.time() - lock_path.stat().st_mtime
-                if age > CLAUDE_STOP_DEDUPE_LOCK_STALE_SECONDS:
-                    lock_path.unlink(missing_ok=True)
-                    continue
-            except OSError:
-                pass
-            time.sleep(0.02)
-        except OSError:
-            break
-
-    try:
-        yield fd is not None
-    finally:
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-            try:
-                lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+CLAUDE_STABLE_MESSAGE_DEDUPE_TTL_SECONDS = 24 * 60 * 60
 
 
 class ClaudeCodeParser(BaseParser):
@@ -135,10 +94,8 @@ class ClaudeCodeParser(BaseParser):
         Claude Code 新版在 agentic loop 中（工具调用、子代理）也会触发 Stop 钩子，
         不再仅限于「主代理回复结束」。仅凭 hook_event_name=Stop 已无法区分。
 
-        通过 transcript 真实状态判定：若最后一条 assistant 消息仍在调用工具
-        （content 含 tool_use）或来自子代理 sidechain，说明这不是主回复结束。
-
-        无 transcript 或读取失败时返回 False（保守通知，避免漏报）。
+        新版优先使用 Stop 的结构化字段与 last_assistant_message；仅在旧负载缺少
+        最终文本时回退读取 transcript。无 transcript 或读取失败时保守通知。
         """
         if not isinstance(stdin_json, dict):
             return False
@@ -149,6 +106,21 @@ class ClaudeCodeParser(BaseParser):
         # stop_hook_active=True：Stop 链重复触发（上次 Stop 导致 Claude 继续），跳过避免重复通知
         if stdin_json.get("stop_hook_active") is True:
             return True
+
+        # Claude Code 2.1.145+ 会在后台任务/定时任务仍可唤醒当前 turn 时触发 Stop。
+        # 这些 Stop 是暂时空闲，不是用户所需的最终回复完成。
+        for key in ("background_tasks", "session_crons"):
+            pending = stdin_json.get(key)
+            if isinstance(pending, (list, dict)) and pending:
+                return True
+
+        # 新版 Stop 明确提供最终文本；官方建议通知类 hook 使用此字段，避免读取
+        # 可能异步滞后的 transcript。transcript 仅作为旧版本兼容回退。
+        last_message = stdin_json.get("last_assistant_message") or stdin_json.get(
+            "lastAssistantMessage"
+        )
+        if isinstance(last_message, str) and last_message.strip():
+            return False
 
         transcript_path = stdin_json.get("transcript_path")
         if not isinstance(transcript_path, str) or not transcript_path:
@@ -280,11 +252,14 @@ class ClaudeCodeParser(BaseParser):
             text = str(value)
         return hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
 
-    def _stop_dedupe_key(self, stdin_json: Optional[Dict[str, Any]]) -> Optional[str]:
-        """生成最终 Stop 事件的跨进程去重 key。
+    def _stop_dedupe_key(
+        self,
+        stdin_json: Optional[Dict[str, Any]],
+    ) -> Optional[Tuple[str, float]]:
+        """生成最终 Stop 事件的跨进程去重 key 与适用 TTL。
 
-        优先使用 transcript 中最后一条真实 assistant 的行号；这能区分“文本相同但属于
-        新一轮回复”的情况。无 transcript 时，短期退化为 last_assistant_message 去重。
+        优先使用 transcript 中稳定的 assistant message.id；无稳定 ID 时按行号区分
+        新回复，无 transcript 时短期退化为 last_assistant_message 去重。
         """
         if not isinstance(stdin_json, dict):
             return None
@@ -298,88 +273,73 @@ class ClaudeCodeParser(BaseParser):
             record = self._read_last_assistant_message_record(path)
             if record is not None:
                 line_number, assistant_obj = record
-                return self._stable_digest({
-                    "session_id": session_id,
-                    "cwd": cwd,
-                    "transcript_path": str(path),
-                    "line_number": line_number,
-                    "assistant": assistant_obj,
-                })
+                message = assistant_obj.get("message")
+                message_id = message.get("id") if isinstance(message, dict) else None
+                if isinstance(message_id, str) and message_id.strip():
+                    return (
+                        self._stable_digest({
+                            "session_id": session_id,
+                            "cwd": cwd,
+                            "transcript_path": str(path),
+                            "assistant_message_id": message_id.strip(),
+                        }),
+                        CLAUDE_STABLE_MESSAGE_DEDUPE_TTL_SECONDS,
+                    )
+                return (
+                    self._stable_digest({
+                        "session_id": session_id,
+                        "cwd": cwd,
+                        "transcript_path": str(path),
+                        "line_number": line_number,
+                        "assistant": assistant_obj,
+                    }),
+                    CLAUDE_STOP_DEDUPE_TTL_SECONDS,
+                )
 
         last_message = stdin_json.get("last_assistant_message") or stdin_json.get(
             "lastAssistantMessage"
         )
         if isinstance(last_message, str) and last_message.strip():
-            return self._stable_digest({
-                "session_id": session_id,
-                "cwd": cwd,
-                "last_assistant_message": last_message.strip(),
-            })
+            return (
+                self._stable_digest({
+                    "session_id": session_id,
+                    "cwd": cwd,
+                    "last_assistant_message": last_message.strip(),
+                }),
+                CLAUDE_STOP_DEDUPE_TTL_SECONDS,
+            )
 
         return None
 
     def _is_duplicate_final_stop(self, stdin_json: Optional[Dict[str, Any]]) -> bool:
         """判断同一条最终 Stop 是否已经通知过。"""
-        dedupe_key = self._stop_dedupe_key(stdin_json)
-        if not dedupe_key:
+        dedupe_identity = self._stop_dedupe_key(stdin_json)
+        if not dedupe_identity:
             return False
 
+        dedupe_key, ttl_seconds = dedupe_identity
+
         state_path = CLAUDE_STOP_DEDUPE_STATE_PATH
-        with _claude_stop_state_lock(state_path) as locked:
-            if not locked:
-                self.logger.debug("Claude Stop 去重状态锁不可用，使用无锁兜底")
-            return self._read_update_stop_dedupe_state(state_path, dedupe_key)
+        return mark_recent_key(
+            state_path,
+            dedupe_key,
+            ttl_seconds,
+        )
 
-    def _read_update_stop_dedupe_state(self, state_path: Path, dedupe_key: str) -> bool:
-        """读改写 Stop 去重状态，返回当前 key 是否已存在。"""
-        now = datetime.now().timestamp()
-        state: Dict[str, Any] = {"keys": {}}
+    def _get_raw_hook_event(self) -> Any:
+        """读取未归一化 hook 名，用于对未来未知事件 fail-closed。"""
+        env_event = os.environ.get("CLAUDE_HOOK_EVENT")
+        if env_event:
+            return env_event
 
-        try:
-            if state_path.exists():
-                with state_path.open("r", encoding="utf-8") as fp:
-                    loaded = json.load(fp)
-                if isinstance(loaded, dict) and isinstance(loaded.get("keys"), dict):
-                    state = loaded
-        except (OSError, json.JSONDecodeError) as exc:
-            self.logger.debug("读取 Claude Stop 去重状态失败: %s", exc)
-
-        keys = {
-            key: value
-            for key, value in state.get("keys", {}).items()
-            if (
-                isinstance(value, (int, float))
-                and now - float(value) <= CLAUDE_STOP_DEDUPE_TTL_SECONDS
-            )
-        }
-
-        duplicate = dedupe_key in keys
-        keys[dedupe_key] = now
-
-        try:
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = state_path.with_name(f"{state_path.name}.{os.getpid()}.tmp")
-            with tmp_path.open("w", encoding="utf-8") as fp:
-                json.dump({"keys": keys}, fp, ensure_ascii=False)
-            tmp_path.replace(state_path)
-        except OSError as exc:
-            self.logger.debug("写入 Claude Stop 去重状态失败: %s", exc)
-
-        return duplicate
+        stdin_json = get_stdin_json()
+        if isinstance(stdin_json, dict):
+            return stdin_json.get("hook_event_name")
+        return None
 
     def _get_hook_event(self) -> Optional[str]:
         """从环境变量或 stdin JSON 获取钩子事件名。"""
-        # 优先检查环境变量
-        env_event = os.environ.get("CLAUDE_HOOK_EVENT")
-        if env_event:
-            return self._canonical_hook_event(env_event)
-
-        # 从 stdin JSON 检查 hook_event_name
-        stdin_json = get_stdin_json()
-        if isinstance(stdin_json, dict):
-            return self._canonical_hook_event(stdin_json.get("hook_event_name"))
-
-        return None
+        return self._canonical_hook_event(self._get_raw_hook_event())
 
     def can_parse(self) -> bool:
         """检查是否在 Claude Code 钩子上下文中。"""
@@ -387,8 +347,26 @@ class ClaudeCodeParser(BaseParser):
 
     def _parse_hook_event(self) -> Optional[NotificationEvent]:
         """解析钩子事件（环境变量 + stdin JSON 统一入口）。"""
+        raw_hook_event = self._get_raw_hook_event()
         hook_event = self._get_hook_event()
         stdin_json = get_stdin_json()
+
+        if raw_hook_event and hook_event is None:
+            self.logger.info("未知 Claude hook 事件，安全跳过: %s", raw_hook_event)
+            return NotificationEvent(
+                type="hook-unsupported",
+                agent="claude-code",
+                message="Claude Code hook 事件未适配",
+                summary="Claude Code 未知 hook（忽略通知）",
+                timestamp=datetime.now().isoformat(),
+                conversation_end=False,
+                is_last_turn=False,
+                metadata={
+                    "event": str(raw_hook_event),
+                    "source": "hook",
+                    "suppress_notification": True,
+                },
+            )
 
         if hook_event == "Stop":
             # Claude Code 新版在 agentic loop 中（工具调用/子代理）也会触发 Stop。

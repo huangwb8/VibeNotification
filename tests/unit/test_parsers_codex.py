@@ -1,8 +1,20 @@
 import json
 import sys
 
+import pytest
+
 from vibe_notification.detectors.conversation import detect_conversation_end
 from vibe_notification.parsers.codex import CodexParser
+
+
+@pytest.fixture(autouse=True)
+def _isolate_codex_turn_dedupe_state(monkeypatch, tmp_path):
+    """测试中不要写入真实用户目录下的 Codex turn 去重状态。"""
+    monkeypatch.setattr(
+        "vibe_notification.parsers.codex.CODEX_TURN_DEDUPE_STATE_PATH",
+        tmp_path / "codex-turn-dedupe.json",
+        raising=False,
+    )
 
 
 def test_detect_conversation_end_ignores_assistant_message_event():
@@ -96,6 +108,61 @@ def test_codex_parser_marks_official_agent_turn_complete_as_terminal(monkeypatch
     assert parsed.is_last_turn is True
 
 
+def test_codex_parser_suppresses_duplicate_notification_for_same_turn(monkeypatch):
+    """同一 thread/turn 被新版 Codex 重放时，只能通知一次。"""
+    event = {
+        "type": "agent-turn-complete",
+        "thread-id": "thread-1",
+        "turn-id": "turn-1",
+        "cwd": "/tmp/project",
+        "client": "codex-tui",
+        "input-messages": ["fix the tests"],
+        "last-assistant-message": "Done and verified.",
+    }
+    argv = ["python", "-m", "vibe_notification", json.dumps(event)]
+
+    monkeypatch.setattr(sys, "argv", argv)
+    first = CodexParser().parse()
+    monkeypatch.setattr(sys, "argv", argv)
+    second = CodexParser().parse()
+
+    assert first is not None
+    assert first.conversation_end is True
+    assert second is not None
+    assert second.type == "turn-duplicate"
+    assert second.conversation_end is False
+    assert second.is_last_turn is False
+    assert second.metadata.get("suppress_notification") is True
+
+
+def test_codex_parser_allows_new_turn_in_same_thread(monkeypatch):
+    """同一线程中的下一轮回复不能被 turn 去重误杀。"""
+    base = {
+        "type": "agent-turn-complete",
+        "thread-id": "thread-1",
+        "cwd": "/tmp/project",
+        "client": "codex-tui",
+        "input-messages": ["fix the tests"],
+        "last-assistant-message": "Done and verified.",
+    }
+    first_event = {**base, "turn-id": "turn-1"}
+    second_event = {**base, "turn-id": "turn-2"}
+
+    monkeypatch.setattr(
+        sys, "argv", ["python", "-m", "vibe_notification", json.dumps(first_event)]
+    )
+    first = CodexParser().parse()
+    monkeypatch.setattr(
+        sys, "argv", ["python", "-m", "vibe_notification", json.dumps(second_event)]
+    )
+    second = CodexParser().parse()
+
+    assert first is not None
+    assert first.conversation_end is True
+    assert second is not None
+    assert second.conversation_end is True
+
+
 def test_detect_conversation_end_ignores_codex_subagent_turn_complete():
     """子代理 turn 完成不是主回复完成，不应触发用户通知。"""
     event = {
@@ -166,18 +233,22 @@ def test_detect_conversation_end_ignores_codex_turn_complete_without_final_messa
     assert detect_conversation_end(event) is False
 
 
-def test_detect_conversation_end_rejects_legacy_codex_short_ack_reply():
-    """legacy turn-complete 里的裸确认语过于歧义，不应仅凭文本触发通知。"""
+@pytest.mark.parametrize(
+    "reply",
+    ["OK", "No.", "Looks good.", "答案是 42。", "Working on it"],
+)
+def test_detect_conversation_end_accepts_official_codex_turn_complete_reply(reply):
+    """官方 notify 已声明 turn 完成，不应再根据回复文案猜测。"""
     event = {
         "type": "agent-turn-complete",
         "thread-id": "thread-1",
         "turn-id": "turn-1",
         "client": "codex-tui",
         "input-messages": ["reply with exactly OK"],
-        "last-assistant-message": "OK",
+        "last-assistant-message": reply,
     }
 
-    assert detect_conversation_end(event) is False
+    assert detect_conversation_end(event) is True
 
 
 def test_detect_conversation_end_accepts_codex_short_final_reply_with_explicit_flag():
@@ -193,90 +264,6 @@ def test_detect_conversation_end_accepts_codex_short_final_reply_with_explicit_f
     }
 
     assert detect_conversation_end(event) is True
-
-
-def test_detect_conversation_end_ignores_codex_progress_style_turn_complete():
-    """provider 若提前发出进度播报，不应被当作最终回复。"""
-    event = {
-        "type": "agent-turn-complete",
-        "thread-id": "thread-1",
-        "turn-id": "turn-1",
-        "client": "codex-tui",
-        "input-messages": ["fix the tests"],
-        "last-assistant-message": "Working on it",
-    }
-
-    assert detect_conversation_end(event) is False
-
-
-def test_detect_conversation_end_ignores_codex_progress_style_turn_complete_in_chinese():
-    """中文进度播报同样不应触发最终通知。"""
-    event = {
-        "type": "agent-turn-complete",
-        "thread-id": "thread-1",
-        "turn-id": "turn-1",
-        "client": "codex-tui",
-        "input-messages": ["fix the tests"],
-        "last-assistant-message": "先读取仓库的 README，再确认问题位置。",
-    }
-
-    assert detect_conversation_end(event) is False
-
-
-def test_detect_conversation_end_ignores_codex_acknowledgement_style_turn_complete_in_chinese():
-    """收到用户消息后的确认语，不应被误判为最终通知。"""
-    event = {
-        "type": "agent-turn-complete",
-        "thread-id": "thread-1",
-        "turn-id": "turn-1",
-        "client": "codex-tui",
-        "input-messages": ["fix the tests"],
-        "last-assistant-message": "好的，我来处理。先检查一下仓库。",
-    }
-
-    assert detect_conversation_end(event) is False
-
-
-def test_detect_conversation_end_ignores_codex_acknowledgement_style_turn_complete_in_english():
-    """英文确认语同样不应被误判为最终通知。"""
-    event = {
-        "type": "agent-turn-complete",
-        "thread-id": "thread-1",
-        "turn-id": "turn-1",
-        "client": "codex-tui",
-        "input-messages": ["fix the tests"],
-        "last-assistant-message": "Sure, I will inspect the repository first.",
-    }
-
-    assert detect_conversation_end(event) is False
-
-
-def test_detect_conversation_end_ignores_bare_codex_acknowledgement_in_chinese():
-    """纯中文确认语本身不应触发最终通知。"""
-    event = {
-        "type": "agent-turn-complete",
-        "thread-id": "thread-1",
-        "turn-id": "turn-1",
-        "client": "codex-tui",
-        "input-messages": ["fix the tests"],
-        "last-assistant-message": "好的",
-    }
-
-    assert detect_conversation_end(event) is False
-
-
-def test_detect_conversation_end_ignores_bare_codex_acknowledgement_in_english():
-    """纯英文确认语本身不应触发最终通知。"""
-    event = {
-        "type": "agent-turn-complete",
-        "thread-id": "thread-1",
-        "turn-id": "turn-1",
-        "client": "codex-tui",
-        "input-messages": ["fix the tests"],
-        "last-assistant-message": "Sure",
-    }
-
-    assert detect_conversation_end(event) is False
 
 
 def test_codex_parser_accepts_hook_payload_but_marks_it_non_terminal(monkeypatch):
@@ -303,6 +290,7 @@ def test_codex_parser_accepts_hook_payload_but_marks_it_non_terminal(monkeypatch
     assert parsed.message == "Codex 已接收用户指令"
     assert parsed.conversation_end is False
     assert parsed.is_last_turn is False
+    assert parsed.metadata.get("suppress_notification") is True
 
 
 def test_codex_parser_accepts_codex_stop_hook_payload_from_stdin(monkeypatch):

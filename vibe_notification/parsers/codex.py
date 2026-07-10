@@ -4,6 +4,7 @@ Codex 解析器
 解析 Codex 事件
 """
 
+import hashlib
 import json
 import logging
 from datetime import datetime
@@ -12,8 +13,15 @@ from typing import Any, Dict, Optional
 from .base import BaseParser
 from ._stdin import get_stdin_json
 from .routing import is_codex_context
+from ..dedupe import mark_recent_key
 from ..models import NotificationEvent
 from ..detectors.conversation import detect_conversation_end
+
+
+CODEX_TURN_DEDUPE_STATE_PATH = (
+    Path.home() / ".config" / "vibe-notification" / "codex-turn-dedupe.json"
+)
+CODEX_TURN_DEDUPE_TTL_SECONDS = 24 * 60 * 60
 
 
 class CodexParser(BaseParser):
@@ -35,6 +43,33 @@ class CodexParser(BaseParser):
         "subagentstop": "subagent-stop",
         "stop": "stop-hook",
     }
+
+    def _turn_dedupe_key(self, event_data: Dict[str, Any]) -> Optional[str]:
+        """为 Codex 官方 notify turn 生成不泄露原始 id 的稳定 key。"""
+        thread_id = self._get_value(event_data, "thread-id", "thread_id")
+        turn_id = self._get_value(event_data, "turn-id", "turn_id")
+        if not isinstance(thread_id, str) or not thread_id.strip():
+            return None
+        if not isinstance(turn_id, str) or not turn_id.strip():
+            return None
+
+        client = self._get_value(event_data, "client") or "codex"
+        identity = json.dumps(
+            [str(client), thread_id.strip(), turn_id.strip()],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+
+    def _is_duplicate_turn(self, event_data: Dict[str, Any]) -> bool:
+        key = self._turn_dedupe_key(event_data)
+        if key is None:
+            return False
+        return mark_recent_key(
+            CODEX_TURN_DEDUPE_STATE_PATH,
+            key,
+            CODEX_TURN_DEDUPE_TTL_SECONDS,
+        )
 
     def _load_event_data(self) -> Optional[Dict[str, Any]]:
         """读取并校验事件数据。
@@ -231,6 +266,25 @@ class CodexParser(BaseParser):
             agent = self._infer_agent(event_data)
             event_type = self._infer_event_type(event_data)
             message = self._infer_message(event_data, conversation_end)
+            metadata = dict(event_data)
+
+            if conversation_end and self._is_duplicate_turn(event_data):
+                self.logger.info("重复 Codex notify 指向同一 turn，跳过通知")
+                metadata["suppress_notification"] = True
+                metadata["duplicate"] = True
+                return NotificationEvent(
+                    type="turn-duplicate",
+                    agent=agent,
+                    message=message,
+                    summary="Codex 重复 turn（忽略通知）",
+                    timestamp=event_data.get("timestamp", datetime.now().isoformat()),
+                    conversation_end=False,
+                    is_last_turn=False,
+                    metadata=metadata,
+                )
+
+            if self._normalize_hook_event_name(event_data):
+                metadata["suppress_notification"] = True
             summary = message if conversation_end else f"{message}（忽略通知）"
 
             if not conversation_end and event_type in {"agent-turn-complete", "turn-completed"}:
@@ -254,7 +308,7 @@ class CodexParser(BaseParser):
                 tool_name=self._get_value(event_data, "tool_name", "toolName"),
                 conversation_end=conversation_end,
                 is_last_turn=conversation_end,
-                metadata=event_data
+                metadata=metadata
             )
             return event
         except Exception as e:

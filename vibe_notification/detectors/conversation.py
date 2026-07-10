@@ -382,6 +382,18 @@ def _codex_turn_complete_has_terminal_content(event: Dict[str, Any]) -> bool:
     return _looks_like_codex_terminal_message(assistant_message)
 
 
+def _has_official_codex_notify_identity(event: Dict[str, Any]) -> bool:
+    """官方 notify payload 必须同时携带稳定的 thread 与 turn 身份。"""
+    thread_id = event.get("thread-id") or event.get("thread_id")
+    turn_id = event.get("turn-id") or event.get("turn_id")
+    return (
+        isinstance(thread_id, str)
+        and bool(thread_id.strip())
+        and isinstance(turn_id, str)
+        and bool(turn_id.strip())
+    )
+
+
 def _contains_codex_hook_event(event: Dict[str, Any]) -> bool:
     """检查负载任意层是否携带 Codex hook 事件。"""
     for payload in _iter_nested_dicts(event):
@@ -467,6 +479,11 @@ def _detect_codex_conversation_end(event: Dict[str, Any]) -> bool:
             if structured_signal is False:
                 return False
             return True
+
+    if event_type == "agent-turn-complete" and _has_official_codex_notify_identity(event):
+        if structured_signal is False:
+            return False
+        return bool(_extract_codex_assistant_message(event))
 
     if event_type in CODEX_NOTIFY_EVENT_TYPES or method in CODEX_APP_SERVER_METHODS:
         if structured_signal is False:

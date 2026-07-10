@@ -5,6 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.25] - 2026-07-11
+
+### 修复
+- Claude Code Stop 去重改用稳定的 assistant `message.id`，避免同一回复的增量 transcript
+  快照产生连续提示；稳定 ID 保留 24 小时，新版 `last_assistant_message` 优先于可能
+  滞后的 transcript。
+- 识别 Claude Code `background_tasks` 与 `session_crons`，后台工作仍会继续时不提示。
+- 未知 Claude hook 在适配前强制静默，防止未来事件误落入通用终态解析。
+- Codex 按 `thread-id` + `turn-id` 做跨进程原子幂等，重复 notify 只处理一次。
+- Codex 输入及其它 hook 生命周期事件强制静默，即使关闭结束检测也不会误提示。
+- 带稳定 turn 身份的官方 `agent-turn-complete` 直接按事件语义处理，短回复不再漏报。
+- 未知或新版未识别事件改为安全跳过；测试通知仅能由显式 `--test` 触发。
+
+### 测试
+- 新增 Claude 增量消息、滞后 transcript、后台任务、未知 hook，Codex 重复 turn、
+  短回复、用户输入静默，以及线程/真实多进程幂等回归测试。
+
 ## [1.0.21] - 2026-06-18
 
 ### 修复

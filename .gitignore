@@ -171,6 +171,7 @@ test_output/
 # Temporary files
 *.tmp
 *.temp
+.bensz-api/
 
 # Cache
 tests/*

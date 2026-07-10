@@ -5,9 +5,8 @@
 """
 
 import logging
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 from .models import NotificationConfig, NotificationEvent
 from .config import get_env_config
 from .managers import ParserManager, NotifierManager, NotificationBuilder
@@ -68,16 +67,8 @@ class VibeNotifier:
                     raw_event_data = parser._load_event_data()
                 event = parser.parse()
             else:
-                self.logger.warning("未知运行模式，使用测试事件")
-                event = NotificationEvent(
-                    type="test",
-                    agent="vibe-notification",
-                    message=t("test_message"),
-                    summary=t("test_summary"),
-                    timestamp=datetime.now().isoformat(),
-                    conversation_end=True,
-                    is_last_turn=True
-                )
+                self.logger.warning("未知或不支持的事件，安全跳过通知")
+                return
 
             if event is None:
                 self.logger.info("解析结果为空，跳过通知发送")
