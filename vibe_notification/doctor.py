@@ -91,25 +91,45 @@ def _analyze_codex_config(path: Path) -> Iterable[DoctorFinding]:
             level="WARN",
             scope="codex",
             summary=f"未发现 Codex 配置文件: {path}",
-            recommendation="如需通知，请在 ~/.codex/config.toml 配置 notify，或用 --wrap-codex 走 session-end 模式。",
+            recommendation="如需本轮任务结束通知，请在 ~/.codex/config.toml 配置 Stop hook；仅需进程退出通知时使用 --wrap-codex。",
         )
         return
 
     content = path.read_text(encoding="utf-8")
     has_notify = re.search(r"(?m)^\s*notify\s*=", content) is not None
+    has_stop = re.search(
+        r"(?mi)^\s*\[\[?\s*hooks\.Stop(?:\s*\]|\s*\.)",
+        content,
+    ) is not None
 
-    if has_notify:
+    if has_stop:
         yield DoctorFinding(
             level="INFO",
             scope="codex",
-            summary="Codex 已配置 notify 命令。",
-            recommendation="按 OpenAI 当前文档，notify 只在 agent 完成一轮回复时触发，不等于整个 Codex 进程退出。",
+            summary="Codex 已配置 Stop hook。",
+            recommendation="Stop 在主代理停止本轮输出时触发，不等于 SessionEnd。",
         )
     else:
         yield DoctorFinding(
             level="WARN",
             scope="codex",
-            summary="Codex 未配置 notify 命令。",
+            summary="Codex 未配置 Stop hook。",
+            recommendation="建议使用 Stop hook，避免收到消息或中间 turn 完成时提前通知。",
+        )
+
+    if has_notify and has_stop:
+        yield DoctorFinding(
+            level="WARN",
+            scope="codex",
+            summary="Codex 同时配置了 Stop hook 和旧版 notify，可能产生双通道重复事件。",
+            recommendation="请移除 notify，只保留 Stop hook。",
+        )
+    elif has_notify:
+        yield DoctorFinding(
+            level="WARN",
+            scope="codex",
+            summary="Codex 正在使用旧版 notify 命令。",
+            recommendation="建议迁移到 Stop hook；当前 notify 仅通过 10 秒尾沿防抖提供兼容。",
         )
 
     yield DoctorFinding(

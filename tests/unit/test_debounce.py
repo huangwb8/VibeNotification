@@ -11,6 +11,7 @@ from vibe_notification.debounce import (
     handle_codex_turn_event,
     DEFAULT_COOLDOWN_SECONDS,
 )
+from vibe_notification._debounce_worker import claim_session_event
 from vibe_notification.models import NotificationEvent
 
 
@@ -46,9 +47,9 @@ def _make_parsed_event(**overrides):
 class TestShouldDebounce:
     """should_debounce 判断逻辑"""
 
-    def test_codex_turn_complete_does_not_debounce_by_default(self):
+    def test_codex_turn_complete_debounces_by_default(self):
         event = _make_parsed_event(type="agent-turn-complete", agent="codex")
-        assert should_debounce(event) is False
+        assert should_debounce(event) is True
 
     def test_codex_turn_complete_should_debounce_when_env_enabled(self):
         event = _make_parsed_event(type="agent-turn-complete", agent="codex")
@@ -60,10 +61,10 @@ class TestShouldDebounce:
         with patch.dict("os.environ", {"VIBE_DEBOUNCE_COOLDOWN": "8"}):
             assert should_debounce(event) is True
 
-    def test_codex_app_server_turn_should_debounce(self):
+    def test_codex_app_server_turn_does_not_debounce(self):
         event = _make_parsed_event(type="turn/completed", agent="codex")
         with patch.dict("os.environ", {"VIBE_DEBOUNCE_COOLDOWN": "8"}):
-            assert should_debounce(event) is True
+            assert should_debounce(event) is False
 
     def test_session_end_bypasses_debounce(self):
         event = _make_parsed_event(type="session-end", agent="codex")
@@ -97,6 +98,7 @@ class TestWriteSessionState:
         state = json.loads(state_path.read_text(encoding="utf-8"))
         assert state["event"]["type"] == "agent-turn-complete"
         assert state["cooldown"] == DEFAULT_COOLDOWN_SECONDS
+        assert state["generation"]
 
     def test_uses_session_id_for_filename(self, tmp_path):
         event_data = _make_turn_event(session_id="sess-abc-123")
@@ -136,23 +138,42 @@ class TestHandleCodexTurnEvent:
         event = _make_parsed_event()
 
         with patch("vibe_notification.debounce.SESSION_STATE_DIR", tmp_path), \
-             patch("vibe_notification.debounce.spawn_debounce_worker") as mock_spawn, \
+             patch(
+                 "vibe_notification.debounce.spawn_debounce_worker",
+                 return_value=True,
+             ) as mock_spawn, \
              patch.dict("os.environ", {"VIBE_DEBOUNCE_COOLDOWN": "8"}):
             result = handle_codex_turn_event(event_data, event)
 
         assert result is True
         mock_spawn.assert_called_once()
 
-    def test_does_not_debounce_codex_turn_event_by_default(self, tmp_path):
+    def test_debounces_codex_turn_event_by_default(self, tmp_path):
         event_data = _make_turn_event()
         event = _make_parsed_event()
 
         with patch("vibe_notification.debounce.SESSION_STATE_DIR", tmp_path), \
-             patch("vibe_notification.debounce.spawn_debounce_worker") as mock_spawn:
+             patch(
+                 "vibe_notification.debounce.spawn_debounce_worker",
+                 return_value=True,
+             ) as mock_spawn:
+            result = handle_codex_turn_event(event_data, event)
+
+        assert result is True
+        mock_spawn.assert_called_once()
+
+    def test_falls_back_to_direct_notification_when_worker_fails(self, tmp_path):
+        event_data = _make_turn_event()
+        event = _make_parsed_event()
+
+        with patch("vibe_notification.debounce.SESSION_STATE_DIR", tmp_path), \
+             patch(
+                 "vibe_notification.debounce.spawn_debounce_worker",
+                 return_value=False,
+             ):
             result = handle_codex_turn_event(event_data, event)
 
         assert result is False
-        mock_spawn.assert_not_called()
 
     def test_skips_non_codex_event(self, tmp_path):
         event_data = {"type": "session-end"}
@@ -162,6 +183,43 @@ class TestHandleCodexTurnEvent:
             result = handle_codex_turn_event(event_data, event)
 
         assert result is False
+
+
+class TestDebounceWorkerClaim:
+    """后台 worker 只能消费自己对应的最新一代事件。"""
+
+    def test_stale_worker_does_not_consume_newer_event(self, tmp_path):
+        state_path = tmp_path / "thread-1.json"
+        state_path.write_text(
+            json.dumps({
+                "generation": "new-generation",
+                "event": _make_parsed_event().to_dict(),
+            }),
+            encoding="utf-8",
+        )
+
+        claimed = claim_session_event(state_path, "old-generation")
+
+        assert claimed is None
+        assert state_path.exists()
+
+    def test_latest_worker_consumes_event_once(self, tmp_path):
+        state_path = tmp_path / "thread-1.json"
+        state_path.write_text(
+            json.dumps({
+                "generation": "current-generation",
+                "event": _make_parsed_event().to_dict(),
+            }),
+            encoding="utf-8",
+        )
+
+        first = claim_session_event(state_path, "current-generation")
+        second = claim_session_event(state_path, "current-generation")
+
+        assert first is not None
+        assert first["type"] == "agent-turn-complete"
+        assert second is None
+        assert not state_path.exists()
 
     def test_skips_claude_code_event(self, tmp_path):
         event_data = {"type": "agent-turn-complete", "agent": "claude-code"}

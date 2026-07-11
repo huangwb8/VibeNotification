@@ -283,7 +283,7 @@ class CodexParser(BaseParser):
                     metadata=metadata,
                 )
 
-            if self._normalize_hook_event_name(event_data):
+            if self._normalize_hook_event_name(event_data) and not conversation_end:
                 metadata["suppress_notification"] = True
             summary = message if conversation_end else f"{message}（忽略通知）"
 

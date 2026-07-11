@@ -1,7 +1,11 @@
 from pathlib import Path
 
 from vibe_notification.cli import parse_args, run_codex_wrapper
-from vibe_notification.doctor import format_doctor_report, run_doctor
+from vibe_notification.doctor import (
+    _analyze_codex_config,
+    format_doctor_report,
+    run_doctor,
+)
 from vibe_notification.models import NotificationConfig
 
 
@@ -48,7 +52,7 @@ def test_run_codex_wrapper_sends_session_end_notification(monkeypatch):
     ]
 
 
-def test_doctor_reports_semantic_gap_between_stop_and_notify(tmp_path, monkeypatch):
+def test_doctor_recommends_codex_stop_over_legacy_notify(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
     (home / ".codex").mkdir(parents=True)
@@ -79,12 +83,37 @@ def test_doctor_reports_semantic_gap_between_stop_and_notify(tmp_path, monkeypat
 
     assert "Claude Code 已配置 Stop hook" in report
     assert "Claude Code 未配置 SessionEnd hook（可选）" in report
-    assert "Codex 已配置 notify 命令" in report
-    assert "notify 只在 agent 完成一轮回复时触发" in report
+    assert "Codex 正在使用旧版 notify 命令" in report
+    assert "建议迁移到 Stop hook" in report
     assert "VibeNotification 系统弹窗已启用" in report
     assert "检测到 terminal-notifier" in report
     assert "Claude Code 场景默认不绑定 sender" in report
     assert "无需配置 SessionEnd" in report
+
+
+def test_doctor_warns_when_codex_stop_and_notify_are_both_configured(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    (home / ".codex" / "config.toml").write_text(
+        """
+notify = ["python3", "-m", "vibe_notification"]
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "python3 -m vibe_notification"
+""",
+        encoding="utf-8",
+    )
+
+    findings = list(_analyze_codex_config(home / ".codex" / "config.toml"))
+    report = format_doctor_report(findings)
+
+    assert "Codex 已配置 Stop hook" in report
+    assert "同时配置了 Stop hook 和旧版 notify" in report
+    assert "移除 notify" in report
 
 
 def test_main_uses_env_config_override_for_notification_flag(monkeypatch, capsys):

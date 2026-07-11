@@ -69,17 +69,33 @@ def test_detect_conversation_end_ignores_nested_codex_session_end_event():
     assert detect_conversation_end(event) is False
 
 
-def test_detect_conversation_end_ignores_codex_stop_hook_payload():
-    """Codex Stop hook 输入不是 notify 事件，不应直接通知。"""
+def test_detect_conversation_end_accepts_codex_stop_hook_payload():
+    """Codex Stop 表示主代理已停止本轮输出，应触发通知。"""
     event = {
         "hook_event_name": "Stop",
         "cwd": "/tmp/project",
         "model": "gpt-5-codex",
         "permission_mode": "default",
-        "last_assistant_message": "Working on it",
+        "last_assistant_message": "Implemented the fix and verified the tests.",
         "session_id": "session-1",
         "stop_hook_active": False,
         "transcript_path": None,
+    }
+
+    assert detect_conversation_end(event) is True
+
+
+def test_detect_conversation_end_ignores_reentrant_codex_stop_hook():
+    """已被 Stop hook 要求继续的 turn 不能提前通知。"""
+    event = {
+        "hook_event_name": "Stop",
+        "cwd": "/tmp/project",
+        "model": "gpt-5-codex",
+        "permission_mode": "default",
+        "last_assistant_message": "Running one more verification pass.",
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "stop_hook_active": True,
     }
 
     assert detect_conversation_end(event) is False
@@ -294,13 +310,13 @@ def test_codex_parser_accepts_hook_payload_but_marks_it_non_terminal(monkeypatch
 
 
 def test_codex_parser_accepts_codex_stop_hook_payload_from_stdin(monkeypatch):
-    """与 Claude 同名的 Codex Stop hook 也应由 CodexParser 识别并静默跳过。"""
+    """Codex Stop 应由 CodexParser 识别为主代理本轮结束。"""
     event = {
         "hook_event_name": "Stop",
         "cwd": "/tmp/project",
         "model": "gpt-5-codex",
         "permission_mode": "default",
-        "last_assistant_message": "Working on it",
+        "last_assistant_message": "Implemented the fix and verified the tests.",
         "session_id": "session-1",
         "stop_hook_active": False,
         "transcript_path": None,
@@ -328,8 +344,9 @@ def test_codex_parser_accepts_codex_stop_hook_payload_from_stdin(monkeypatch):
     assert parsed is not None
     assert parsed.type == "stop-hook"
     assert parsed.agent == "codex-hook"
-    assert parsed.conversation_end is False
-    assert parsed.is_last_turn is False
+    assert parsed.conversation_end is True
+    assert parsed.is_last_turn is True
+    assert parsed.metadata.get("suppress_notification") is not True
 
 
 def test_detect_conversation_end_ignores_codex_app_server_non_terminal_turn_completed():

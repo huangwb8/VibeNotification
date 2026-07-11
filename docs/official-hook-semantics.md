@@ -7,7 +7,7 @@
 ## 结论
 
 - Claude Code：主回复结束对应 `Stop`。`SubagentStop` 只表示子代理完成响应；`SessionEnd` 是会话生命周期事件，不应作为“本轮回复完成”通知依据。
-- Codex：`notify` 当前面向 `agent-turn-complete` 这类 turn 完成事件。Codex Hooks 里 `Stop` 与 `SubagentStop` 是不同事件；`SubagentStop` 是子代理生命周期事件，不应触发主任务完成通知。
+- Codex：优先使用主代理的 `Stop` 事件作为“本轮停止输出”的精确信号。`SubagentStop` 是子代理生命周期事件，`SessionEnd` 是会话生命周期事件，二者都不应触发主任务完成通知。
 - VibeNotification 的默认策略应是：只对主代理回复完成发送通知；显式子代理事件、子代理 transcript、sidechain、`agent_id` / `agent_type` / `agent_transcript_path` 等子代理信号都应被压制。
 
 ## 官方依据
@@ -29,11 +29,12 @@
 
 对本项目的含义：
 
-- Codex `notify` 的 `agent-turn-complete` 可以作为主回复完成候选事件。
+- Codex `Stop` 是主代理 turn 停止事件；`stop_hook_active=true` 表示该 turn 已被 Stop hook 要求继续，不能提前通知。
+- Codex `notify` 的 `agent-turn-complete` 仅作为旧版兼容候选事件，默认经过尾沿静默期合并。
 - 当 `agent-turn-complete` 带有官方 `thread-id`、`turn-id` 和 assistant 文本时，
   直接按 turn 完成语义处理，不根据回复长短或措辞猜测。
 - Codex hook payload 中的 `SubagentStop` 必须被识别为非主回复完成。
-- 如果误把 VibeNotification 接到 Codex hooks，`Stop` 也要谨慎处理；hook 事件不等同于 `notify` 的最终通知语义。
+- `UserPromptSubmit`、`SessionStart`、工具事件及 `SubagentStop` 必须保持静默。
 
 ### Claude Code
 
@@ -70,6 +71,10 @@
   - 将 Codex `SubagentStop` 解析为 `subagent-stop`。
   - 该事件保持 `conversation_end=False`，由通知层跳过。
   - 使用 `thread-id` + `turn-id` 的哈希身份做跨进程幂等，重复 notify 强制静默。
+  - 将非重入的主代理 `Stop` 解析为本轮结束，不再把所有 hook 一律压制。
+- `vibe_notification/debounce.py` / `_debounce_worker.py`
+  - 旧版 `notify` 默认使用 10 秒尾沿静默期，仅保留同一线程的最后事件。
+  - worker 校验事件版本并原子消费状态，旧 worker 不会重复发送新事件。
 - `vibe_notification/detectors/conversation.py`
   - 在 Codex 终态判定前先检查子代理信号。
   - 子代理信号包括 `subagent_id`、`sub_agent`、`agent_id`、`agent_type`、`agent_transcript_path`、`isSubagent`、`isSidechain` 等。
@@ -92,6 +97,8 @@
   - `test_stop_with_transcript_showing_sidechain_assistant_is_skipped`
   - `test_run_skips_claude_session_end_hook` 相关核心路径
 - `tests/unit/test_parsers_codex.py`
+  - `test_detect_conversation_end_accepts_codex_stop_hook_payload`
+  - `test_detect_conversation_end_ignores_reentrant_codex_stop_hook`
   - `test_detect_conversation_end_ignores_codex_subagent_turn_complete`
   - `test_codex_parser_marks_subagent_turn_complete_as_suppressed`
   - `test_codex_parser_suppresses_official_subagent_stop_hook`
@@ -104,11 +111,12 @@
 python -m pytest tests/
 ```
 
-最近一次验证结果：`193 passed, 2 skipped`。
+最近一次验证结果：`198 passed, 2 skipped`。
 
 ## 维护原则
 
 - 不把 `SessionEnd` 作为默认通知触发点。
+- Codex 优先使用 `Stop`，不要与旧 `notify` 同时配置。
 - 不把子代理完成事件作为主任务完成。
 - 对官方新增 hook 字段应优先按结构化字段判断，少依赖自由文本。
 - 新增 provider 兼容时必须补“主回复完成”和“子代理完成不通知”两类回归测试。

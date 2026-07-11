@@ -461,10 +461,18 @@ def _codex_structured_terminal_signal(event: Dict[str, Any]) -> bool | None:
 
 def _detect_codex_conversation_end(event: Dict[str, Any]) -> bool:
     """基于 Codex 官方事件形状判断是否为真实 turn 结束。"""
-    if _contains_codex_hook_event(event):
+    if _contains_subagent_signal(event):
         return False
 
-    if _contains_subagent_signal(event):
+    hook_event_name = _normalize_event_name(
+        event.get("hook_event_name") or event.get("hookEventName")
+    )
+    if hook_event_name == "stop":
+        if event.get("stop_hook_active") is True:
+            return False
+        return bool(_extract_codex_assistant_message(event))
+
+    if _contains_codex_hook_event(event):
         return False
 
     event_type = _normalize_event_name(event.get("type") or event.get("event"))

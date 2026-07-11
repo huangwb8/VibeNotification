@@ -9,7 +9,7 @@ python -m vibe_notification --version
 - 升级
 
 ```
-version=1.0.25
+version=1.0.26
 pyproject.toml里软件版本升级为{version}。创建tag v{version}；使用 git-commit skill创建commit信息；通过git-publish-release skill 发布release。推送新版本到pypi。然后，在 /Volumes/2T01/softwares/anoconda/anaconda3/bin/python 这个默认的conda的python里安装最新版本。
 ```
 
@@ -41,6 +41,8 @@ Codex 完成一轮回复，也不会收到通知。是本机codex的config.toml�
 ```
 
 # 日常
+
+Codex在刚刚成功接收信息后会出现提示，这是不对的； 正确的业务逻辑是：刚刚成功接收信息时不通知，等本轮任务结束了（不是SessionEnd，而是AI经过多轮工作后停止输出时的才算“本轮任务结束”）再通知。请修复源代码。所有问题都要解决。 如果工作时有疑问，或者有更好的方案，自己选个最优方案优化，不要问我。不要破坏其它功能。要保证最终成品能正常、稳定、高效地工作。
 
 ---
 

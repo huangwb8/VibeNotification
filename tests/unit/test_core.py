@@ -118,14 +118,14 @@ def test_process_event_skips_explicitly_suppressed_event_when_detection_disabled
     notifier.notifier_manager.send_notifications.assert_not_called()
 
 
-def test_run_skips_codex_stop_hook_payload_from_stdin(monkeypatch):
-    """Codex Stop hook 与 notify 同时存在时，不应提前发送第一条通知。"""
+def test_run_notifies_for_codex_stop_hook_payload_from_stdin(monkeypatch):
+    """Codex Stop 是主代理停止输出的精确通知时机。"""
     event = {
         "hook_event_name": "Stop",
         "cwd": "/tmp/project",
         "model": "gpt-5-codex",
         "permission_mode": "default",
-        "last_assistant_message": "Working on it",
+        "last_assistant_message": "Implemented the fix and verified the tests.",
         "session_id": "session-1",
         "stop_hook_active": False,
         "transcript_path": None,
@@ -157,8 +157,8 @@ def test_run_skips_codex_stop_hook_payload_from_stdin(monkeypatch):
 
     notifier.run()
 
-    notifier.notification_builder.build_notification_content.assert_not_called()
-    notifier.notifier_manager.send_notifications.assert_not_called()
+    notifier.notification_builder.build_notification_content.assert_called_once()
+    notifier.notifier_manager.send_notifications.assert_called_once()
 
 
 def test_run_never_notifies_for_codex_user_prompt_submit_when_detection_disabled(
@@ -241,8 +241,8 @@ def test_run_skips_unknown_claude_hook_even_with_terminal_payload(monkeypatch):
     notifier.notifier_manager.send_notifications.assert_not_called()
 
 
-def test_run_notifies_for_official_codex_turn_complete_regardless_of_wording(monkeypatch):
-    """官方 turn 完成后的短回复仍应通知；输入 hook 由独立路径静默。"""
+def test_run_debounces_official_codex_turn_complete_by_default(monkeypatch, tmp_path):
+    """旧 notify 的中间 turn 默认进入尾沿防抖，不立即通知。"""
     event = {
         "type": "agent-turn-complete",
         "thread-id": "thread-1",
@@ -273,10 +273,15 @@ def test_run_notifies_for_official_codex_turn_complete_regardless_of_wording(mon
     )
     notifier.notifier_manager = Mock()
 
+    monkeypatch.setattr("vibe_notification.debounce.SESSION_STATE_DIR", tmp_path)
+    worker = Mock()
+    monkeypatch.setattr("vibe_notification.debounce.spawn_debounce_worker", worker)
+
     notifier.run()
 
-    notifier.notification_builder.build_notification_content.assert_called_once()
-    notifier.notifier_manager.send_notifications.assert_called_once()
+    worker.assert_called_once()
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
 
 
 def test_run_skips_claude_session_end_hook(monkeypatch):
@@ -308,7 +313,7 @@ def test_run_skips_claude_session_end_hook(monkeypatch):
     notifier.notifier_manager.send_notifications.assert_not_called()
 
 
-def test_run_skips_codex_completed_commentary_payload(monkeypatch):
+def test_run_skips_codex_completed_commentary_payload(monkeypatch, tmp_path):
     """Codex 接收消息后的 completed/commentary 事件不应触发提示音。"""
     event = {
         "method": "turn/completed",
@@ -347,8 +352,12 @@ def test_run_skips_codex_completed_commentary_payload(monkeypatch):
         )
     )
     notifier.notifier_manager = Mock()
+    worker = Mock()
+    monkeypatch.setattr("vibe_notification.debounce.SESSION_STATE_DIR", tmp_path)
+    monkeypatch.setattr("vibe_notification.debounce.spawn_debounce_worker", worker)
 
     notifier.run()
 
+    worker.assert_not_called()
     notifier.notification_builder.build_notification_content.assert_not_called()
     notifier.notifier_manager.send_notifications.assert_not_called()

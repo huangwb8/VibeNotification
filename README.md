@@ -91,16 +91,22 @@ English | [中文](README.zh.md)
 
 ### Codex CLI
 
-Add a notifier command to `~/.codex/config.toml` so Codex triggers VibeNotification when the agent actually finishes a turn (`agent-turn-complete`):
+Use a `Stop` hook in `~/.codex/config.toml`. It runs when the main agent stops the current turn after its tool calls and multi-step work; receiving a user message, a subagent stopping, or the whole session exiting does not count as task completion:
 
 ```toml
-notify = ["python3", "-m", "vibe_notification"]
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = "python3 -m vibe_notification"
+timeout = 30
 ```
 
-Note: `notify` is turn-based, not session-exit-based.
-As of April 14, 2026, OpenAI's current Codex docs still describe `notify` and `Stop`/hook-style events as turn-scoped rather than whole-process-exit signals.
+Do not configure this `Stop` hook and the legacy `notify` command at the same time, because the same task can arrive through both event channels. If an older Codex version requires `notify = ["python3", "-m", "vibe_notification"]`, VibeNotification waits for a 10-second quiet period by default and processes only the last `agent-turn-complete`. Set `VIBE_DEBOUNCE_COOLDOWN` to tune the delay, or set it to `0` to explicitly disable compatibility debouncing.
 
-If you only want one notification after the whole Codex session exits, do not rely on `notify`. Use the built-in wrapper:
+Note: `Stop` means that the main agent stopped the current turn; it is not a whole-session exit event.
+
+If you only want one notification after the whole Codex session exits, do not use `Stop`. Use the built-in wrapper:
 
 ```bash
 python -m vibe_notification --wrap-codex
@@ -134,7 +140,13 @@ model_provider = "xxx"
 model = "gpt-5.1-codex-max"
 model_reasoning_effort = "medium"
 disable_response_storage = true
-notify = ["python3", "-m", "vibe_notification"]
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = "python3 -m vibe_notification"
+timeout = 30
 
 [model_providers.xxx]
 name = "xxx"
@@ -153,7 +165,7 @@ notifications = true
 - Codex `~/.codex/config.toml`:
 
 ```toml
-notify = ["python3", "-m", "vibe_notification", "--sound", "0"]
+command = "python3 -m vibe_notification --sound 0"
 ```
 
 - Claude Code `~/.claude/settings.json`:
@@ -186,7 +198,7 @@ python -m vibe_notification --sound 0 --test
 - Codex:
 
 ```toml
-notify = ["python3", "-m", "vibe_notification", "--notification", "0"]
+command = "python3 -m vibe_notification --notification 0"
 ```
 
 - Claude Code:
@@ -221,17 +233,17 @@ python -m vibe_notification --notification 0 --test
 - `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` — enable debug logging; raw Codex payloads are also appended to `~/.config/vibe-notification/debug/codex-events.jsonl`
 - `VIBE_NOTIFICATION_SENDER_MODE=off|auto|force` — control macOS `terminal-notifier` sender binding; Claude Code hooks and terminal-hosted CLI contexts default to `off`
 
-Codex examples:
+Codex examples (replace `command` under `[[hooks.Stop.hooks]]` above):
 
 ```toml
 # Temporarily mute sound
-notify = ["env", "VIBE_NOTIFICATION_SOUND=0", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_SOUND=0 python3 -m vibe_notification"
 
 # Disable all notifications (for debugging)
-notify = ["env", "VIBE_NOTIFICATION_NOTIFY=0", "VIBE_NOTIFICATION_SOUND=0", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_NOTIFY=0 VIBE_NOTIFICATION_SOUND=0 python3 -m vibe_notification"
 
 # Enable debug logging
-notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
 ```
 
 Claude Code example:
@@ -267,9 +279,9 @@ VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification --test
 Available macOS sound types: `Glass` (default), `Ping`, `Pop`, `Tink`, `Basso`.
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_SOUND_TYPE=Ping", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_SOUND_TYPE=Ping python3 -m vibe_notification"
 # Low tone
-notify = ["env", "VIBE_NOTIFICATION_SOUND_TYPE=Basso", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_SOUND_TYPE=Basso python3 -m vibe_notification"
 ```
 
 Claude Code:
@@ -303,9 +315,9 @@ VIBE_NOTIFICATION_SOUND_TYPE=Ping python -m vibe_notification --test
 Volume range is `0.0–1.0`.
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.2", "python3", "-m", "vibe_notification"]
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.5", "python3", "-m", "vibe_notification"]
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0", "python3", "-m", "vibe_notification"] # mute
+command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.2 python3 -m vibe_notification"
+command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.5 python3 -m vibe_notification"
+command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0 python3 -m vibe_notification" # mute
 ```
 
 Claude Code:
@@ -365,19 +377,19 @@ python -m vibe_notification --config
 Focus mode (low volume + toast only + short display):
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.1", "VIBE_NOTIFICATION_SOUND_TYPE=Basso", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.1 VIBE_NOTIFICATION_SOUND_TYPE=Basso python3 -m vibe_notification"
 ```
 
 Meeting mode (sound only, louder, specific tone):
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_NOTIFY=0", "VIBE_NOTIFICATION_SOUND_VOLUME=0.7", "VIBE_NOTIFICATION_SOUND_TYPE=Ping", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_NOTIFY=0 VIBE_NOTIFICATION_SOUND_VOLUME=0.7 VIBE_NOTIFICATION_SOUND_TYPE=Ping python3 -m vibe_notification"
 ```
 
 Debug mode (all on + debug logs):
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
 ```
 
 ## CLI Reference

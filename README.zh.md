@@ -91,16 +91,22 @@
 
 ### Codex CLI
 
-在 `~/.codex/config.toml` 中添加通知命令，让 Codex 在代理真实完成一轮回复时（`agent-turn-complete`）调用 VibeNotification：
+推荐在 `~/.codex/config.toml` 中使用 `Stop` hook。它在主代理经过工具调用和多轮工作、停止本轮输出时触发；收到用户消息、子代理结束和整个 Session 退出都不会触发完成通知：
 
 ```toml
-notify = ["python3", "-m", "vibe_notification"]
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = "python3 -m vibe_notification"
+timeout = 30
 ```
 
-注意：这里的 `notify` 是“每轮回复结束”触发，不是“整个 Codex 会话退出”触发。
-按 2026 年 4 月 14 日 OpenAI 当前文档，Codex 的 `notify` 以及 `Stop`/hook 类事件仍然是 turn 语义，不是整个进程退出语义。
+不要同时配置上述 `Stop` hook 和旧版 `notify`，否则同一任务可能从两条事件通道进入。若因兼容旧版 Codex 必须继续使用 `notify = ["python3", "-m", "vibe_notification"]`，VibeNotification 会默认等待 10 秒静默期并只处理最后一个 `agent-turn-complete`；可通过 `VIBE_DEBOUNCE_COOLDOWN` 调整秒数，设为 `0` 可显式关闭兼容防抖。
 
-如果你只希望在整个 Codex 会话退出后再通知，不要依赖 `notify`，改用内置 wrapper：
+注意：`Stop` 是“本轮主代理停止输出”，不是整个 Codex 会话退出。
+
+如果你只希望在整个 Codex 会话退出后再通知，不要使用 `Stop`，改用内置 wrapper：
 
 ```bash
 python -m vibe_notification --wrap-codex
@@ -134,7 +140,13 @@ model_provider = "xxx"
 model = "gpt-5.1-codex-max"
 model_reasoning_effort = "medium"
 disable_response_storage = true
-notify = ["python3", "-m", "vibe_notification"]
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = "python3 -m vibe_notification"
+timeout = 30
 
 [model_providers.xxx]
 name = "xxx"
@@ -153,7 +165,7 @@ notifications = true
 - Codex `~/.codex/config.toml`：
 
 ```toml
-notify = ["python3", "-m", "vibe_notification", "--sound", "0"]
+command = "python3 -m vibe_notification --sound 0"
 ```
 
 - Claude Code `~/.claude/settings.json`：
@@ -186,7 +198,7 @@ python -m vibe_notification --sound 0 --test
 - Codex：
 
 ```toml
-notify = ["python3", "-m", "vibe_notification", "--notification", "0"]
+command = "python3 -m vibe_notification --notification 0"
 ```
 
 - Claude Code：
@@ -221,17 +233,17 @@ python -m vibe_notification --notification 0 --test
 - `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG`：启用调试日志；Codex 原始 payload 会额外写入 `~/.config/vibe-notification/debug/codex-events.jsonl`
 - `VIBE_NOTIFICATION_SENDER_MODE=off|auto|force`：控制 macOS `terminal-notifier` 是否绑定 sender；Claude Code hook 和终端宿主 CLI 默认使用 `off`
 
-Codex 示例：
+Codex 示例（替换上文 `[[hooks.Stop.hooks]]` 中的 `command`）：
 
 ```toml
 # 静音
-notify = ["env", "VIBE_NOTIFICATION_SOUND=0", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_SOUND=0 python3 -m vibe_notification"
 
 # 完全禁用通知
-notify = ["env", "VIBE_NOTIFICATION_NOTIFY=0", "VIBE_NOTIFICATION_SOUND=0", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_NOTIFY=0 VIBE_NOTIFICATION_SOUND=0 python3 -m vibe_notification"
 
 # 调试日志
-notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
 ```
 
 Claude Code 示例：
@@ -267,9 +279,9 @@ VIBE_NOTIFICATION_SENDER_MODE=off python -m vibe_notification --test
 可选（macOS 内置）：`Glass`（默认）、`Ping`、`Pop`、`Tink`、`Basso`。
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_SOUND_TYPE=Ping", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_SOUND_TYPE=Ping python3 -m vibe_notification"
 # 低音
-notify = ["env", "VIBE_NOTIFICATION_SOUND_TYPE=Basso", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_SOUND_TYPE=Basso python3 -m vibe_notification"
 ```
 
 Claude Code：
@@ -303,9 +315,9 @@ VIBE_NOTIFICATION_SOUND_TYPE=Ping python -m vibe_notification --test
 范围 `0.0–1.0`：
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.2", "python3", "-m", "vibe_notification"]
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.5", "python3", "-m", "vibe_notification"]
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0", "python3", "-m", "vibe_notification"] # 静音
+command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.2 python3 -m vibe_notification"
+command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.5 python3 -m vibe_notification"
+command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0 python3 -m vibe_notification" # 静音
 ```
 
 Claude Code：
@@ -365,19 +377,19 @@ python -m vibe_notification --config
 专注模式（低音量 + 仅弹窗 + 短时显示）：
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_SOUND_VOLUME=0.1", "VIBE_NOTIFICATION_SOUND_TYPE=Basso", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.1 VIBE_NOTIFICATION_SOUND_TYPE=Basso python3 -m vibe_notification"
 ```
 
 会议模式（只响铃 + 较高音量 + 特定音色）：
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_NOTIFY=0", "VIBE_NOTIFICATION_SOUND_VOLUME=0.7", "VIBE_NOTIFICATION_SOUND_TYPE=Ping", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_NOTIFY=0 VIBE_NOTIFICATION_SOUND_VOLUME=0.7 VIBE_NOTIFICATION_SOUND_TYPE=Ping python3 -m vibe_notification"
 ```
 
 调试模式（全启用 + 调试日志）：
 
 ```toml
-notify = ["env", "VIBE_NOTIFICATION_LOG_LEVEL=DEBUG", "python3", "-m", "vibe_notification"]
+command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
 ```
 
 ## CLI 参考
