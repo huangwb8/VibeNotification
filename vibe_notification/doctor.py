@@ -128,8 +128,14 @@ def _analyze_codex_config(path: Path) -> Iterable[DoctorFinding]:
         yield DoctorFinding(
             level="WARN",
             scope="codex",
-            summary="Codex 正在使用旧版 notify 命令。",
-            recommendation="建议迁移到 Stop hook；当前 notify 仅通过 10 秒尾沿防抖提供兼容。",
+            summary=(
+                "Codex 正在使用无法区分过程消息与最终答复的旧版 notify 命令。"
+            ),
+            recommendation=(
+                "请迁移到 Stop hook；VibeNotification 默认会静默跳过旧 notify。"
+                "仅在旧版 Codex 无法使用 hooks 时，才显式设置 "
+                "VIBE_ALLOW_LEGACY_CODEX_NOTIFY=1 启用不可靠的尾沿防抖兼容。"
+            ),
         )
 
     yield DoctorFinding(

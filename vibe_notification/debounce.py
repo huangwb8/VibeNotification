@@ -27,6 +27,26 @@ DEFAULT_COOLDOWN_SECONDS = 10
 SESSION_STATE_DIR = Path.home() / ".config" / "vibe-notification" / "sessions"
 
 
+def _allow_legacy_codex_notify() -> bool:
+    """旧 notify 缺少消息阶段，仅允许用户显式启用兼容模式。"""
+    value = os.environ.get("VIBE_ALLOW_LEGACY_CODEX_NOTIFY", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_legacy_codex_notify(
+    event_data: Dict[str, Any], event: NotificationEvent
+) -> bool:
+    """识别 Codex 旧 notify 的无阶段 agent-turn-complete 负载。"""
+    return (
+        bool(event.agent)
+        and "codex" in event.agent.lower()
+        and event.type == "agent-turn-complete"
+        and not event_data.get("hook_event_name")
+        and not event_data.get("hookEventName")
+        and not event_data.get("method")
+    )
+
+
 def _cooldown_seconds() -> int:
     """读取静默期；非法配置安全回退到默认值。"""
     raw_value = os.environ.get("VIBE_DEBOUNCE_COOLDOWN")
@@ -157,16 +177,33 @@ def spawn_debounce_worker(
         return False
 
 
-def handle_codex_turn_event(event_data: Dict[str, Any], event: NotificationEvent) -> bool:
+def handle_codex_turn_event(
+    event_data: Dict[str, Any], event: NotificationEvent
+) -> bool:
     """处理 Codex turn-complete 事件的防抖逻辑。
 
     返回 True 表示事件已被防抖接管（调用方不应立即发送通知）。
-    返回 False 表示事件不需要防抖，调用方应立即处理。
+    返回 False 表示事件未进入防抖；调用方仍需遵守事件自身的 suppress 标记。
     """
     if event.type == "stop-hook" and event.conversation_end:
         state_path = _session_file_path(event_data)
         if state_path is not None:
             state_path.unlink(missing_ok=True)
+        return False
+
+    if (
+        _is_legacy_codex_notify(event_data, event)
+        and not _allow_legacy_codex_notify()
+    ):
+        event.metadata = dict(event.metadata or {})
+        event.metadata["suppress_notification"] = True
+        event.metadata["suppression_reason"] = "ambiguous-legacy-codex-notify"
+        logger.warning(
+            "旧版 Codex notify 无法区分过程消息与最终答复，"
+            "已跳过通知；"
+            "请迁移到 Stop hook。若必须兼容旧版 Codex，可显式设置 "
+            "VIBE_ALLOW_LEGACY_CODEX_NOTIFY=1"
+        )
         return False
 
     if not should_debounce(event):

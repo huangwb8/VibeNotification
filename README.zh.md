@@ -34,7 +34,7 @@
 - 推荐钩子：`Stop`（每次主回复完成）。
 - 如果你要的是“某个回复结束就通知”，直接用 `Stop`，这也是默认且唯一推荐的钩子。
 - 不建议把通知命令挂到 `SessionEnd` 或 `SubagentStop`：VibeNotification 默认会忽略它们，避免会话退出、子代理完成或工具链事件造成重复提示。
-- 在 macOS 下，VibeNotification 现在会在 Claude Code hook 场景和终端宿主 CLI 场景默认关闭 `sender` 绑定，以提高横幅弹窗稳定性；如需沿用宿主 App 图标/归属，可设置 `VIBE_NOTIFICATION_SENDER_MODE=auto`。
+- 在 macOS 下，VibeNotification 现在会在 Claude Code hook 场景和终端宿主 CLI 场景默认关闭 `sender` 绑定，以提高横幅弹窗稳定性；如需强制沿用宿主 App 图标/归属，可设置 `VIBE_NOTIFICATION_SENDER_MODE=force`。
 - 如果通知只进入通知中心，请到 `系统设置 > 通知` 检查当前生效的应用（`sender=off` 时通常是 `terminal-notifier`，`auto/force` 时通常是 VS Code / Terminal 等宿主 App），确认“允许通知”已打开、样式为横幅/提醒，且没有被专注模式压制。
 - 在 `~/.claude/settings.json` 添加 Stop 钩子：
 
@@ -102,7 +102,7 @@ command = "python3 -m vibe_notification"
 timeout = 30
 ```
 
-不要同时配置上述 `Stop` hook 和旧版 `notify`，否则同一任务可能从两条事件通道进入。若因兼容旧版 Codex 必须继续使用 `notify = ["python3", "-m", "vibe_notification"]`，VibeNotification 会默认等待 10 秒静默期并只处理最后一个 `agent-turn-complete`；可通过 `VIBE_DEBOUNCE_COOLDOWN` 调整秒数，设为 `0` 可显式关闭兼容防抖。
+不要同时配置上述 `Stop` hook 和旧版 `notify`，否则同一任务可能从两条事件通道进入。旧 `notify` 的 `agent-turn-complete` 负载不包含 `commentary` / `final_answer` 阶段，固定静默期无法可靠判断最终回复，因此 VibeNotification 默认静默跳过旧 `notify`。仅当旧版 Codex 无法使用 hooks 时，才可显式设置 `VIBE_ALLOW_LEGACY_CODEX_NOTIFY=1` 恢复 10 秒尾沿防抖兼容；该模式仍可能把长时间工具调用之间的过程 turn 误判为结束。`VIBE_DEBOUNCE_COOLDOWN` 可调整兼容静默秒数。
 
 注意：`Stop` 是“本轮主代理停止输出”，不是整个 Codex 会话退出。
 
@@ -228,10 +228,38 @@ python -m vibe_notification --notification 0 --test
 
 ### 临时控制（环境变量）
 
-- `VIBE_NOTIFICATION_SOUND=0`：临时禁用声音
-- `VIBE_NOTIFICATION_NOTIFY=0`：临时禁用弹窗
-- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG`：启用调试日志；Codex 原始 payload 会额外写入 `~/.config/vibe-notification/debug/codex-events.jsonl`
-- `VIBE_NOTIFICATION_SENDER_MODE=off|auto|force`：控制 macOS `terminal-notifier` 是否绑定 sender；Claude Code hook 和终端宿主 CLI 默认使用 `off`
+在 hook 命令中，`env 变量=值 命令` 表示只为后面的命令临时设置环境变量。例如：
+
+```toml
+command = "env VIBE_NOTIFICATION_SENDER_MODE=off python3 -m vibe_notification"
+```
+
+这不会永久修改 shell 或系统环境。`env` 后面可以连续放置多个 `变量=值`，最后才是要执行的 Python 命令。
+
+常用环境变量如下：
+
+| 变量 | 可用值 | 作用 | 重要说明 |
+|------|--------|------|----------|
+| `VIBE_NOTIFICATION_SOUND` | `0` | 临时关闭声音 | 这里只识别 `0`；如需强制开启，使用 CLI `--sound 1` |
+| `VIBE_NOTIFICATION_NOTIFY` | `0` | 临时关闭系统弹窗 | 不影响声音；如需强制开启，使用 CLI `--notification 1` |
+| `VIBE_NOTIFICATION_SOUND_VOLUME` | `0.0`–`1.0` | 覆盖声音音量 | 超出范围会被截断到 `0.0` 或 `1.0`，默认配置为 `0.1` |
+| `VIBE_NOTIFICATION_SOUND_TYPE` | 如 `Glass`、`Ping`、`Pop`、`Tink`、`Basso` | 覆盖提示音 | 具体可用声音受操作系统影响 |
+| `VIBE_NOTIFICATION_LOG_LEVEL` | `DEBUG`、`INFO`、`WARNING`、`ERROR` | 覆盖日志级别 | `DEBUG` 会记录更详细信息，可能包含 Codex 原始 payload |
+| `VIBE_NOTIFICATION_LANGUAGE` | `zh`、`en` | 覆盖界面语言 | 非法值会被忽略 |
+| `VIBE_NOTIFICATION_SENDER_MODE` | `auto`、`off`、`force` | 控制 macOS 通知 sender 绑定 | 仅影响通知归属和展示稳定性，不会关闭弹窗 |
+| `VIBE_NOTIFICATION_SENDER_BUNDLE_ID` | macOS Bundle ID | 指定 sender | 仅在 sender mode 不是 `off` 时生效，属于高级设置 |
+| `VIBE_ALLOW_LEGACY_CODEX_NOTIFY` | `1`、`true`、`yes`、`on` | 启用旧 Codex `notify` 兼容 | 默认关闭；可能把过程 turn 误判为结束，不推荐日常使用 |
+| `VIBE_DEBOUNCE_COOLDOWN` | 非负整数秒 | 设置旧 `notify` 静默期 | 仅在上一项已启用时有意义，默认 `10` 秒 |
+
+对于声音、弹窗和日志级别，优先级为：**CLI 参数 > 环境变量 > `config.json` > 内置默认值**。音量、音色、语言和 sender mode 没有对应 CLI 参数，因此是：**环境变量 > `config.json` > 内置默认值**。
+
+#### macOS sender mode 详解
+
+- `off`：不向 `terminal-notifier` 传递宿主 App 的 Bundle ID。通知仍然会发送，通常归属于 `terminal-notifier`；推荐用于 Codex、Claude Code 和终端 hook，可避免继承 VS Code、Terminal 等宿主 App 的通知策略。
+- `auto`：自动判断运行环境。普通图形应用场景会尝试绑定检测到的宿主 App；Claude Code hook 或终端宿主场景会自动按 `off` 处理。
+- `force`：即使运行在终端宿主中也尝试检测并绑定宿主 App。只有确实希望通知显示为 VS Code、Terminal 等应用时才使用。
+
+`VIBE_NOTIFICATION_SENDER_MODE=off` 与 `VIBE_NOTIFICATION_NOTIFY=0` 完全不同：前者只关闭 sender 绑定，后者才是关闭系统弹窗。
 
 Codex 示例（替换上文 `[[hooks.Stop.hooks]]` 中的 `command`）：
 
@@ -346,7 +374,7 @@ VIBE_NOTIFICATION_SOUND_VOLUME=0.1 python -m vibe_notification --test
 VIBE_NOTIFICATION_SOUND_VOLUME=0.8 python -m vibe_notification --test
 ```
 
-### 通知时长
+### 通知时长（当前平台限制）
 
 编辑 `~/.config/vibe-notification/config.json`：
 
@@ -354,17 +382,14 @@ VIBE_NOTIFICATION_SOUND_VOLUME=0.8 python -m vibe_notification --test
 {
   "enable_sound": true,
   "enable_notification": true,
-  "notification_timeout": 5000,
+  "notification_timeout": 10000,
   "sound_type": "Glass",
   "sound_volume": 0.1,
   "log_level": "INFO"
 }
 ```
 
-- `5000`：5 秒自动消失
-- `10000`：10 秒（默认）
-- `30000`：30 秒
-- `0`：不自动消失
+`notification_timeout` 当前是保留配置字段，通知适配器尚未把它传递给 macOS、Linux 或 Windows 的系统通知后端，因此不能保证按这里的毫秒数关闭。实际展示时长主要由操作系统的通知样式、通知中心和专注模式设置决定。建议暂时保留默认值 `10000`；不要依赖该字段实现必须精确计时的提醒。
 
 或使用交互式配置：
 
@@ -374,7 +399,7 @@ python -m vibe_notification --config
 
 ### 组合模式
 
-专注模式（低音量 + 仅弹窗 + 短时显示）：
+专注模式（低音量 + 柔和音色，保留弹窗）：
 
 ```toml
 command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.1 VIBE_NOTIFICATION_SOUND_TYPE=Basso python3 -m vibe_notification"
@@ -386,7 +411,7 @@ command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.1 VIBE_NOTIFICATION_SOUND_TYPE=B
 command = "env VIBE_NOTIFICATION_NOTIFY=0 VIBE_NOTIFICATION_SOUND_VOLUME=0.7 VIBE_NOTIFICATION_SOUND_TYPE=Ping python3 -m vibe_notification"
 ```
 
-调试模式（全启用 + 调试日志）：
+调试模式（保持当前声音/弹窗开关 + 调试日志）：
 
 ```toml
 command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
@@ -404,6 +429,8 @@ command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
 | `--sound {0,1}` | 选项 | 配置值 | 0 关闭/1 开启声音 |
 | `--notification {0,1}` | 选项 | 配置值 | 0 关闭/1 开启弹窗 |
 | `--log-level {DEBUG,INFO,WARNING,ERROR}` | 选项 | 配置值 | 设置日志级别 |
+| `--doctor` | 标志 | - | 检查 Claude Code、Codex、本项目和通知后端的本地集成状态 |
+| `--wrap-codex` | 标志 | - | 启动 Codex，并仅在 Codex 进程退出后提醒一次；Codex 参数放在 `--` 后 |
 | `--version` | 标志 | - | 显示版本 |
 
 ### 配置文件
@@ -414,12 +441,19 @@ command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
 |----|------|--------|------|
 | `enable_sound` | 布尔 | `true` | 启用声音 |
 | `enable_notification` | 布尔 | `true` | 启用系统通知 |
-| `notification_timeout` | 整数 | `10000` | 显示时长（毫秒） |
-| `sound_type` | 字符串 | `"default"` | 声音类型 |
+| `notification_timeout` | 整数 | `10000` | 保留字段；当前平台适配器尚未应用 |
+| `sound_type` | 字符串 | `"Glass"` | 声音类型 |
 | `sound_volume` | 浮点 | `0.1` | 音量大小 |
 | `log_level` | 字符串 | `"INFO"` | 日志级别 |
 | `detect_conversation_end` | 布尔 | `true` | 检测会话结束 |
+| `language` | 字符串 | `"zh"` | 界面语言：`zh` 或 `en` |
 | `macos_sender_mode` | 字符串 | `"auto"` | macOS sender 模式：`auto`、`off`、`force` |
+
+补充说明：
+
+- 旧版 `config.example.json` 或已有配置中的 `"default"` 音色仍受兼容支持。
+- `detect_conversation_end` 建议保持 `true`。关闭后普通非结束事件可能按旧行为进入通知流程，但显式标记为必须忽略的安全事件仍不会通知。
+- `notification_timeout` 当前尚未由平台通知适配器应用，详见上文“通知时长（当前平台限制）”。
 
 ### 环境变量
 
@@ -429,6 +463,12 @@ command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
 | `VIBE_NOTIFICATION_NOTIFY` | 覆盖弹窗设置 | `VIBE_NOTIFICATION_NOTIFY=0` |
 | `VIBE_NOTIFICATION_LOG_LEVEL` | 覆盖日志级别 | `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` |
 | `VIBE_NOTIFICATION_SENDER_MODE` | 覆盖 macOS sender 模式 | `VIBE_NOTIFICATION_SENDER_MODE=off` |
+| `VIBE_NOTIFICATION_SOUND_VOLUME` | 覆盖音量并限制在 `0.0`–`1.0` | `VIBE_NOTIFICATION_SOUND_VOLUME=0.3` |
+| `VIBE_NOTIFICATION_SOUND_TYPE` | 覆盖系统提示音 | `VIBE_NOTIFICATION_SOUND_TYPE=Glass` |
+| `VIBE_NOTIFICATION_LANGUAGE` | 覆盖界面语言 | `VIBE_NOTIFICATION_LANGUAGE=zh` |
+| `VIBE_NOTIFICATION_SENDER_BUNDLE_ID` | 指定 macOS sender Bundle ID | `VIBE_NOTIFICATION_SENDER_BUNDLE_ID=com.apple.Terminal` |
+| `VIBE_ALLOW_LEGACY_CODEX_NOTIFY` | 显式启用不可靠的旧 Codex notify 防抖兼容 | `VIBE_ALLOW_LEGACY_CODEX_NOTIFY=1` |
+| `VIBE_DEBOUNCE_COOLDOWN` | 旧 Codex notify 兼容静默期（秒） | `VIBE_DEBOUNCE_COOLDOWN=30` |
 
 ### 常用命令
 
@@ -446,23 +486,21 @@ python -m vibe_notification --notification 0 --test
 python -m vibe_notification --log-level DEBUG --test
 ```
 
-### 钩子示例
+### 集成检查
 
-Claude Code：
-
-```bash
-echo '{"toolName": "Bash"}' | python -m vibe_notification
-VIBE_NOTIFICATION_SOUND=0 echo '{"toolName": "Task"}' | python -m vibe_notification
-VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification
-```
-
-Codex：
+检查 Codex/Claude Code 是否使用了推荐的 `Stop` hook，并确认声音、弹窗和 macOS 后端状态：
 
 ```bash
-python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}'
-python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}' --notification 1 --sound 0
-VIBE_NOTIFICATION_SOUND=1 VIBE_NOTIFICATION_NOTIFY=1 python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}'
+python -m vibe_notification --doctor
 ```
+
+单独验证当前设置是否能发出弹窗和声音：
+
+```bash
+python -m vibe_notification --test
+```
+
+旧 Codex `agent-turn-complete` JSON 仅用于无法使用 hooks 的兼容场景，默认会被静默跳过。不要把手工传入这类 JSON 当作推荐的 Codex 配置或常规测试方式。
 
 ## 发布到 PyPI
 

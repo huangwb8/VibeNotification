@@ -142,13 +142,19 @@ class TestHandleCodexTurnEvent:
                  "vibe_notification.debounce.spawn_debounce_worker",
                  return_value=True,
              ) as mock_spawn, \
-             patch.dict("os.environ", {"VIBE_DEBOUNCE_COOLDOWN": "8"}):
+             patch.dict(
+                 "os.environ",
+                 {
+                     "VIBE_DEBOUNCE_COOLDOWN": "8",
+                     "VIBE_ALLOW_LEGACY_CODEX_NOTIFY": "1",
+                 },
+             ):
             result = handle_codex_turn_event(event_data, event)
 
         assert result is True
         mock_spawn.assert_called_once()
 
-    def test_debounces_codex_turn_event_by_default(self, tmp_path):
+    def test_suppresses_legacy_codex_notify_by_default(self, tmp_path):
         event_data = _make_turn_event()
         event = _make_parsed_event()
 
@@ -159,8 +165,10 @@ class TestHandleCodexTurnEvent:
              ) as mock_spawn:
             result = handle_codex_turn_event(event_data, event)
 
-        assert result is True
-        mock_spawn.assert_called_once()
+        assert result is False
+        mock_spawn.assert_not_called()
+        assert event.metadata["suppress_notification"] is True
+        assert event.metadata["suppression_reason"] == "ambiguous-legacy-codex-notify"
 
     def test_falls_back_to_direct_notification_when_worker_fails(self, tmp_path):
         event_data = _make_turn_event()

@@ -34,7 +34,7 @@ English | [中文](README.zh.md)
 - Recommended hook: `Stop` (when each main reply completes).
 - If what you want is "notify me when this reply is done", use `Stop`. That is the default and the only recommended hook.
 - Do not attach the notifier command to `SessionEnd` or `SubagentStop`: VibeNotification ignores them by default to avoid duplicate alerts from session-exit, subagent, or tool-chain lifecycle events.
-- On macOS, VibeNotification now defaults to `sender` off in Claude Code hook contexts and terminal-hosted CLI contexts for more reliable banners. If you explicitly want host-app attribution/icon, set `VIBE_NOTIFICATION_SENDER_MODE=auto`.
+- On macOS, VibeNotification now defaults to `sender` off in Claude Code hook contexts and terminal-hosted CLI contexts for more reliable banners. If you explicitly want host-app attribution/icon, set `VIBE_NOTIFICATION_SENDER_MODE=force`.
 - If a notification appears only in Notification Center, check `System Settings > Notifications` for the effective app (`terminal-notifier` when sender is off, or the host app such as VS Code / Terminal when sender is auto/force). Make sure notifications are allowed, banner/alert style is enabled, and Focus is not suppressing them.
 - Edit `~/.claude/settings.json` and add a Stop hook:
 
@@ -102,7 +102,7 @@ command = "python3 -m vibe_notification"
 timeout = 30
 ```
 
-Do not configure this `Stop` hook and the legacy `notify` command at the same time, because the same task can arrive through both event channels. If an older Codex version requires `notify = ["python3", "-m", "vibe_notification"]`, VibeNotification waits for a 10-second quiet period by default and processes only the last `agent-turn-complete`. Set `VIBE_DEBOUNCE_COOLDOWN` to tune the delay, or set it to `0` to explicitly disable compatibility debouncing.
+Do not configure this `Stop` hook and the legacy `notify` command at the same time, because the same task can arrive through both event channels. Legacy `agent-turn-complete` payloads do not include the `commentary` / `final_answer` phase, so no fixed quiet period can reliably identify the final reply. VibeNotification therefore suppresses legacy `notify` events by default. Only when an older Codex version cannot use hooks, set `VIBE_ALLOW_LEGACY_CODEX_NOTIFY=1` to restore the 10-second trailing-edge compatibility debounce; long tool calls can still make that mode misclassify an intermediate turn as complete. Use `VIBE_DEBOUNCE_COOLDOWN` to tune the compatibility delay.
 
 Note: `Stop` means that the main agent stopped the current turn; it is not a whole-session exit event.
 
@@ -228,10 +228,38 @@ python -m vibe_notification --notification 0 --test
 
 ### Temporary toggles (environment variables)
 
-- `VIBE_NOTIFICATION_SOUND=0` — mute sound
-- `VIBE_NOTIFICATION_NOTIFY=0` — disable system notification
-- `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` — enable debug logging; raw Codex payloads are also appended to `~/.config/vibe-notification/debug/codex-events.jsonl`
-- `VIBE_NOTIFICATION_SENDER_MODE=off|auto|force` — control macOS `terminal-notifier` sender binding; Claude Code hooks and terminal-hosted CLI contexts default to `off`
+In a hook command, `env NAME=value command` sets an environment variable only for the command that follows it. For example:
+
+```toml
+command = "env VIBE_NOTIFICATION_SENDER_MODE=off python3 -m vibe_notification"
+```
+
+This does not permanently modify your shell or system environment. You can place multiple `NAME=value` assignments after `env`; the final arguments are the Python command to execute.
+
+Common environment variables:
+
+| Variable | Accepted values | Effect | Important notes |
+|----------|-----------------|--------|-----------------|
+| `VIBE_NOTIFICATION_SOUND` | `0` | Temporarily disable sound | Only `0` is recognized here; use CLI `--sound 1` to force sound on |
+| `VIBE_NOTIFICATION_NOTIFY` | `0` | Temporarily disable system toasts | Does not disable sound; use CLI `--notification 1` to force toasts on |
+| `VIBE_NOTIFICATION_SOUND_VOLUME` | `0.0`–`1.0` | Override sound volume | Values are clamped to the range; the config default is `0.1` |
+| `VIBE_NOTIFICATION_SOUND_TYPE` | e.g. `Glass`, `Ping`, `Pop`, `Tink`, `Basso` | Override the alert sound | Available sounds depend on the operating system |
+| `VIBE_NOTIFICATION_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` | Override log level | `DEBUG` records more detail and can include raw Codex payloads |
+| `VIBE_NOTIFICATION_LANGUAGE` | `zh`, `en` | Override UI language | Invalid values are ignored |
+| `VIBE_NOTIFICATION_SENDER_MODE` | `auto`, `off`, `force` | Control macOS sender binding | Changes notification attribution, not whether a toast is sent |
+| `VIBE_NOTIFICATION_SENDER_BUNDLE_ID` | a macOS Bundle ID | Select a sender explicitly | Advanced; only effective when sender mode is not `off` |
+| `VIBE_ALLOW_LEGACY_CODEX_NOTIFY` | `1`, `true`, `yes`, `on` | Enable legacy Codex `notify` compatibility | Off by default; can misclassify an intermediate turn, so it is not recommended |
+| `VIBE_DEBOUNCE_COOLDOWN` | a non-negative integer in seconds | Set the legacy `notify` quiet period | Relevant only when the previous option is enabled; defaults to `10` seconds |
+
+For sound, toast, and log-level settings, precedence is: **CLI option > environment variable > `config.json` > built-in default**. Volume, sound type, language, and sender mode have no CLI equivalent, so their precedence is: **environment variable > `config.json` > built-in default**.
+
+#### macOS sender modes
+
+- `off`: Do not pass a host application Bundle ID to `terminal-notifier`. The notification is still sent and is normally attributed to `terminal-notifier`. This is recommended for Codex, Claude Code, and terminal hooks because it avoids inheriting VS Code or Terminal notification policies.
+- `auto`: Detect the context. Normal GUI-hosted runs try to bind the detected host application, while Claude Code hooks and terminal-hosted runs automatically behave like `off`.
+- `force`: Try to detect and bind the host application even from a terminal context. Use this only when you specifically want notifications attributed to VS Code, Terminal, or another host app.
+
+`VIBE_NOTIFICATION_SENDER_MODE=off` is not the same as `VIBE_NOTIFICATION_NOTIFY=0`: the former disables sender binding only; the latter disables system toasts.
 
 Codex examples (replace `command` under `[[hooks.Stop.hooks]]` above):
 
@@ -346,7 +374,7 @@ VIBE_NOTIFICATION_SOUND_VOLUME=0.1 python -m vibe_notification --test
 VIBE_NOTIFICATION_SOUND_VOLUME=0.8 python -m vibe_notification --test
 ```
 
-### Notification timeout
+### Notification timeout (current platform limitation)
 
 Edit `~/.config/vibe-notification/config.json`:
 
@@ -354,17 +382,14 @@ Edit `~/.config/vibe-notification/config.json`:
 {
   "enable_sound": true,
   "enable_notification": true,
-  "notification_timeout": 5000,
+  "notification_timeout": 10000,
   "sound_type": "Glass",
   "sound_volume": 0.1,
   "log_level": "INFO"
 }
 ```
 
-- `5000` = 5s auto-dismiss
-- `10000` = 10s (default)
-- `30000` = 30s
-- `0` = sticky, manual close
+`notification_timeout` is currently a reserved configuration field. The platform adapters do not yet pass it to the macOS, Linux, or Windows notification backends, so the value cannot guarantee dismissal after an exact number of milliseconds. Actual display duration is primarily controlled by operating-system notification style, notification-center settings, and focus mode. Keep the default `10000` for now, and do not rely on this field for timing-critical alerts.
 
 Or use the interactive config:
 
@@ -374,7 +399,7 @@ python -m vibe_notification --config
 
 ### Prebuilt combos
 
-Focus mode (low volume + toast only + short display):
+Focus mode (low volume + gentle tone, with toast retained):
 
 ```toml
 command = "env VIBE_NOTIFICATION_SOUND_VOLUME=0.1 VIBE_NOTIFICATION_SOUND_TYPE=Basso python3 -m vibe_notification"
@@ -386,7 +411,7 @@ Meeting mode (sound only, louder, specific tone):
 command = "env VIBE_NOTIFICATION_NOTIFY=0 VIBE_NOTIFICATION_SOUND_VOLUME=0.7 VIBE_NOTIFICATION_SOUND_TYPE=Ping python3 -m vibe_notification"
 ```
 
-Debug mode (all on + debug logs):
+Debug mode (keep current sound/toast toggles + debug logs):
 
 ```toml
 command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
@@ -404,6 +429,8 @@ command = "env VIBE_NOTIFICATION_LOG_LEVEL=DEBUG python3 -m vibe_notification"
 | `--sound {0,1}` | choice | config value | Enable/disable sound (0=off, 1=on) |
 | `--notification {0,1}` | choice | config value | Enable/disable system notification (0=off, 1=on) |
 | `--log-level {DEBUG,INFO,WARNING,ERROR}` | choice | config value | Set log level |
+| `--doctor` | flag | - | Check local Claude Code, Codex, VibeNotification, and notification-backend integration |
+| `--wrap-codex` | flag | - | Launch Codex and notify once when its process exits; put Codex arguments after `--` |
 | `--version` | flag | - | Show version |
 
 ### Config file
@@ -414,12 +441,19 @@ Location: `~/.config/vibe-notification/config.json`
 |-----|------|---------|-------------|
 | `enable_sound` | bool | `true` | Enable sound |
 | `enable_notification` | bool | `true` | Enable system notification |
-| `notification_timeout` | int | `10000` | Duration in ms |
-| `sound_type` | string | `"default"` | Sound type |
+| `notification_timeout` | int | `10000` | Reserved; not currently applied by platform adapters |
+| `sound_type` | string | `"Glass"` | Sound type |
 | `sound_volume` | float | `0.1` | Sound volume |
 | `log_level` | string | `"INFO"` | Log level |
 | `detect_conversation_end` | bool | `true` | Detect end of conversation |
+| `language` | string | `"zh"` | UI language: `zh` or `en` |
 | `macos_sender_mode` | string | `"auto"` | Sender mode for macOS: `auto`, `off`, or `force` |
+
+Additional notes:
+
+- `"default"` in older `config.example.json` files and existing configs remains supported for compatibility.
+- Keep `detect_conversation_end` set to `true`. When disabled, ordinary non-terminal events may follow legacy notification behavior, although explicitly suppressed safety events remain silent.
+- `notification_timeout` is not currently applied by platform notification adapters; see “Notification timeout (current platform limitation)” above.
 
 ### Environment variables
 
@@ -429,6 +463,12 @@ Location: `~/.config/vibe-notification/config.json`
 | `VIBE_NOTIFICATION_NOTIFY` | Override notification setting | `VIBE_NOTIFICATION_NOTIFY=0` |
 | `VIBE_NOTIFICATION_LOG_LEVEL` | Override log level | `VIBE_NOTIFICATION_LOG_LEVEL=DEBUG` |
 | `VIBE_NOTIFICATION_SENDER_MODE` | Override macOS sender binding mode | `VIBE_NOTIFICATION_SENDER_MODE=off` |
+| `VIBE_NOTIFICATION_SOUND_VOLUME` | Override and clamp volume to `0.0`–`1.0` | `VIBE_NOTIFICATION_SOUND_VOLUME=0.3` |
+| `VIBE_NOTIFICATION_SOUND_TYPE` | Override the system alert sound | `VIBE_NOTIFICATION_SOUND_TYPE=Glass` |
+| `VIBE_NOTIFICATION_LANGUAGE` | Override UI language | `VIBE_NOTIFICATION_LANGUAGE=en` |
+| `VIBE_NOTIFICATION_SENDER_BUNDLE_ID` | Set the macOS sender Bundle ID | `VIBE_NOTIFICATION_SENDER_BUNDLE_ID=com.apple.Terminal` |
+| `VIBE_ALLOW_LEGACY_CODEX_NOTIFY` | Explicitly enable unreliable legacy Codex notify debounce | `VIBE_ALLOW_LEGACY_CODEX_NOTIFY=1` |
+| `VIBE_DEBOUNCE_COOLDOWN` | Legacy Codex notify quiet period in seconds | `VIBE_DEBOUNCE_COOLDOWN=30` |
 
 ### Typical commands
 
@@ -446,23 +486,21 @@ python -m vibe_notification --notification 0 --test
 python -m vibe_notification --log-level DEBUG --test
 ```
 
-### Hook usage examples
+### Integration checks
 
-Claude Code:
-
-```bash
-echo '{"toolName": "Bash"}' | python -m vibe_notification
-VIBE_NOTIFICATION_SOUND=0 echo '{"toolName": "Task"}' | python -m vibe_notification
-VIBE_NOTIFICATION_NOTIFY=0 python -m vibe_notification
-```
-
-Codex:
+Check whether Codex and Claude Code use the recommended `Stop` hook, and inspect sound, toast, and macOS backend status:
 
 ```bash
-python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}'
-python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}' --notification 1 --sound 0
-VIBE_NOTIFICATION_SOUND=1 VIBE_NOTIFICATION_NOTIFY=1 python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}'
+python -m vibe_notification --doctor
 ```
+
+Test whether the current settings can produce a toast and sound:
+
+```bash
+python -m vibe_notification --test
+```
+
+Legacy Codex `agent-turn-complete` JSON is only for compatibility when hooks are unavailable and is suppressed by default. Do not treat manually passing this JSON as the recommended Codex configuration or normal test path.
 
 ## Publishing to PyPI
 

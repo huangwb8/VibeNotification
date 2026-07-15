@@ -83,8 +83,9 @@ def test_doctor_recommends_codex_stop_over_legacy_notify(tmp_path, monkeypatch):
 
     assert "Claude Code 已配置 Stop hook" in report
     assert "Claude Code 未配置 SessionEnd hook（可选）" in report
-    assert "Codex 正在使用旧版 notify 命令" in report
-    assert "建议迁移到 Stop hook" in report
+    assert "无法区分过程消息与最终答复的旧版 notify 命令" in report
+    assert "默认会静默跳过旧 notify" in report
+    assert "VIBE_ALLOW_LEGACY_CODEX_NOTIFY=1" in report
     assert "VibeNotification 系统弹窗已启用" in report
     assert "检测到 terminal-notifier" in report
     assert "Claude Code 场景默认不绑定 sender" in report

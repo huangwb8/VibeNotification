@@ -241,8 +241,10 @@ def test_run_skips_unknown_claude_hook_even_with_terminal_payload(monkeypatch):
     notifier.notifier_manager.send_notifications.assert_not_called()
 
 
-def test_run_debounces_official_codex_turn_complete_by_default(monkeypatch, tmp_path):
-    """旧 notify 的中间 turn 默认进入尾沿防抖，不立即通知。"""
+def test_run_suppresses_ambiguous_legacy_codex_notify_by_default(
+    monkeypatch, tmp_path
+):
+    """旧 notify 无法区分过程消息与最终答复，默认必须静默跳过。"""
     event = {
         "type": "agent-turn-complete",
         "thread-id": "thread-1",
@@ -252,7 +254,9 @@ def test_run_debounces_official_codex_turn_complete_by_default(monkeypatch, tmp_
         "input-messages": ["please fix this bug"],
         "last-assistant-message": "Sure, I will inspect the repository first.",
     }
-    monkeypatch.setattr(sys, "argv", ["python", "-m", "vibe_notification", json.dumps(event)])
+    monkeypatch.setattr(
+        sys, "argv", ["python", "-m", "vibe_notification", json.dumps(event)]
+    )
 
     notifier = VibeNotifier(
         NotificationConfig(
@@ -275,6 +279,45 @@ def test_run_debounces_official_codex_turn_complete_by_default(monkeypatch, tmp_
 
     monkeypatch.setattr("vibe_notification.debounce.SESSION_STATE_DIR", tmp_path)
     worker = Mock()
+    monkeypatch.setattr("vibe_notification.debounce.spawn_debounce_worker", worker)
+
+    notifier.run()
+
+    worker.assert_not_called()
+    notifier.notification_builder.build_notification_content.assert_not_called()
+    notifier.notifier_manager.send_notifications.assert_not_called()
+
+
+def test_run_allows_legacy_codex_notify_only_with_explicit_opt_in(
+    monkeypatch, tmp_path
+):
+    """需要兼容旧 Codex 时，显式开关仍可恢复尾沿防抖。"""
+    event = {
+        "type": "agent-turn-complete",
+        "thread-id": "thread-1",
+        "turn-id": "turn-1",
+        "cwd": "/tmp/project",
+        "client": "codex-tui",
+        "input-messages": ["please fix this bug"],
+        "last-assistant-message": "Sure, I will inspect the repository first.",
+    }
+    monkeypatch.setattr(
+        sys, "argv", ["python", "-m", "vibe_notification", json.dumps(event)]
+    )
+    monkeypatch.setenv("VIBE_ALLOW_LEGACY_CODEX_NOTIFY", "1")
+
+    notifier = VibeNotifier(
+        NotificationConfig(
+            enable_sound=True,
+            enable_notification=True,
+            detect_conversation_end=True,
+        )
+    )
+    notifier.notification_builder = Mock()
+    notifier.notifier_manager = Mock()
+
+    monkeypatch.setattr("vibe_notification.debounce.SESSION_STATE_DIR", tmp_path)
+    worker = Mock(return_value=True)
     monkeypatch.setattr("vibe_notification.debounce.spawn_debounce_worker", worker)
 
     notifier.run()

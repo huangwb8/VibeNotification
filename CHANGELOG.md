@@ -5,6 +5,19 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-07-16
+
+### 修复
+- 旧版 Codex `notify` 的 `agent-turn-complete` 不提供消息阶段，无法可靠区分过程消息与
+  最终答复；现在默认静默跳过，避免长工具调用跨过固定防抖窗口后产生过程提醒。
+- 仅在显式设置 `VIBE_ALLOW_LEGACY_CODEX_NOTIFY=1` 时保留旧版 10 秒尾沿防抖兼容；
+  推荐统一迁移到 Codex `Stop` hook。
+
+### 文档
+- 补全环境变量、配置优先级、macOS sender mode、CLI 参数和旧 Codex 兼容设置说明，
+  并明确 `notification_timeout` 当前尚未被平台适配器应用。
+- 修正 `config.example.json` 为可直接解析的合法 JSON，并与源码默认 `Glass` 音色对齐。
+
 ## [1.0.25] - 2026-07-11
 
 ### 修复

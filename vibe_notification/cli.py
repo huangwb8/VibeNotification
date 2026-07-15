@@ -30,8 +30,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> Tuple[argparse.Namespace
   # 作为 Claude Code 钩子使用
   echo '{"toolName": "Task"}' | python -m vibe_notification
 
-  # 作为 Codex 钩子使用
-  python -m vibe_notification '{"type":"agent-turn-complete","thread-id":"thread-1","turn-id":"turn-1","cwd":"/tmp/project","input-messages":["fix tests"],"last-assistant-message":"Done"}'
+  # 检查 Claude Code / Codex 的 Stop hook 集成
+  python -m vibe_notification --doctor
 
   # 测试模式
   python -m vibe_notification --test
